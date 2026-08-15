@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-08-15
+
+- Restore the `engines` floor (`node >=20`) that the balance reader's
+  global `fetch` needs. It was added and then clobbered by a version bump
+  in the same session; 0.2.1 shipped without it.
+
 ## 0.2.1 — 2026-08-15
 
 First npm release, as `@dshworks/dsh-meter`.

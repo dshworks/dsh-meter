@@ -32,7 +32,7 @@ cache economics, and your balance.
 ## Install
 
 ```sh
-dsh plugin --profile web add github:dshworks/dsh-meter
+dsh plugin --profile web add @dshworks/dsh-meter
 dsh --profile web
 ```
 

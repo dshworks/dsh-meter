@@ -16,7 +16,7 @@ international platform, CNY for the mainland one). They are independent
 tables, never converted; the account's own `/user/balance` currency
 decides which side is shown.
 
-Install: `dsh plugin --profile web add github:dshworks/dsh-meter`
+Install: `dsh plugin --profile web add @dshworks/dsh-meter` (npm: `@dshworks/dsh-meter`)
 
 ## Docs
 

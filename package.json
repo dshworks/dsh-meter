@@ -1,8 +1,11 @@
 {
-  "name": "dsh-meter",
+  "name": "@dshworks/dsh-meter",
   "description": "The DeepSeek time-of-use meter for dsh: what this session cost, which tariff is running, when it flips, and the account balance behind it — one line under the composer.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -65,8 +68,5 @@
   },
   "devDependencies": {
     "vitest": "^3.2.4"
-  },
-  "engines": {
-    "node": ">=20"
   }
 }

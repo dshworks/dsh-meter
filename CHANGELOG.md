@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 — 2026-08-15
+
+First npm release, as `@dshworks/dsh-meter`.
+
+- **Fix: the bundle patch could not be imported when installed from npm.**
+  `cordis.patch.yml` carried the unscoped package name, and `name` is the
+  specifier the Loader resolves — a profile that installed the package
+  rather than linking a folder called `dsh-meter` failed to boot with
+  `Cannot find package 'dsh-meter'`. The row's `id` is still `dsh-meter`,
+  so configuration written against it is unchanged.
+
 ## 0.2.0 — 2026-08-15
 
 The account joins the meter.

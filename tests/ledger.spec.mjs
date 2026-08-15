@@ -32,6 +32,12 @@ const usage = (input, cacheRead, output) => ({
 /** Fold a list of events from the empty state. */
 const fold = events => events.reduce(foldEvent, init())
 
+/** The projected value flattened to one currency, which is what most assertions are about. */
+const priced = (state, currency = 'usd') => {
+  const value = view(state)
+  return { ...value, ...value.money[currency] }
+}
+
 describe('billedTokens', () => {
   it('reads the three disjoint buckets, reasoning already inside output', () => {
     expect(billedTokens({ inputTokens: 100, cacheReadTokens: 900, outputTokens: 50, reasoningTokens: 40 }))
@@ -55,15 +61,15 @@ describe('the fold', () => {
     const state = init()
     expect(foldEvent(state, stepStart(before))).not.toBe(state)
     expect(foldEvent(state, event('tool/call', before, { turn: 0, step: 0 }))).toBe(state)
-    expect(view(fold([stepStart(before)]), 'usd').requests).toBe(0)
+    expect(priced(fold([stepStart(before)])).requests).toBe(0)
   })
 
   it('bills one request at the tariff in force when it was dispatched', () => {
-    const value = view(fold([
+    const value = priced(fold([
       stepStart(before),
       header(before, 'deepseek-v4-pro'),
       message(before + 4000, 'deepseek-v4-pro', usage(1_000_000, 0, 0)),
-    ]), 'usd')
+    ]))
     expect(value.cost).toBeCloseTo(RATES['deepseek-v4-pro'].flat.usd.miss, 10)
     expect(value.byTariff.flat).toBeCloseTo(value.cost, 10)
     expect(value.requests).toBe(1)
@@ -76,7 +82,7 @@ describe('the fold', () => {
       usageChunk(before + 500, usage(1000, 0, 10)),
       message(before + 900, 'deepseek-v4-flash', usage(1000, 0, 400)),
     ]
-    const value = view(fold(events), 'usd')
+    const value = priced(fold(events))
     expect(value.requests).toBe(1)
     expect(value.tokens).toEqual({ miss: 1000, hit: 0, out: 400 })
   })
@@ -88,18 +94,18 @@ describe('the fold', () => {
       usageChunk(before + 500, usage(1000, 0, 10)),
       message(before + 900, 'deepseek-v4-pro', usage(1000, 0, 10)),
     ]
-    const value = view(fold(events), 'usd')
+    const value = priced(fold(events))
     expect(value.requests).toBe(1)
     expect(value.models).toHaveLength(1)
     expect(value.models[0].model).toBe('deepseek-v4-pro')
   })
 
   it('keeps a chunk-only sample from a step whose request then failed', () => {
-    const value = view(fold([
+    const value = priced(fold([
       stepStart(before),
       header(before, 'deepseek-v4-flash'),
       usageChunk(before + 500, usage(2000, 0, 30)),
-    ]), 'usd')
+    ]))
     expect(value.requests).toBe(1)
     expect(value.models[0].model).toBe('deepseek-v4-flash')
   })
@@ -113,13 +119,13 @@ describe('the fold', () => {
   it('bills each step of a session that crosses a tariff boundary on its own side', () => {
     const offpeak = utc(2026, 8, 17, 0, 50)
     const peak = utc(2026, 8, 17, 1, 10)
-    const value = view(fold([
+    const value = priced(fold([
       stepStart(offpeak, 0, 0),
       header(offpeak, 'deepseek-v4-flash'),
       message(offpeak + 60_000, 'deepseek-v4-flash', usage(1_000_000, 0, 0), 0, 0),
       stepStart(peak, 0, 1),
       message(peak + 1000, 'deepseek-v4-flash', usage(1_000_000, 0, 0), 0, 1),
-    ]), 'usd')
+    ]))
     expect(value.byTariff.offpeak).toBeCloseTo(RATES['deepseek-v4-flash'].offpeak.usd.miss, 10)
     expect(value.byTariff.peak).toBeCloseTo(RATES['deepseek-v4-flash'].peak.usd.miss, 10)
     expect(value.cost).toBeCloseTo(value.byTariff.offpeak + value.byTariff.peak, 10)
@@ -128,21 +134,21 @@ describe('the fold', () => {
   it('bills a request by its dispatch time, not by when the answer landed', () => {
     // Dispatched one minute before the peak window opens, answered inside it.
     const dispatch = utc(2026, 8, 17, 0, 59)
-    const value = view(fold([
+    const value = priced(fold([
       stepStart(dispatch),
       header(dispatch, 'deepseek-v4-flash'),
       message(utc(2026, 8, 17, 1, 3), 'deepseek-v4-flash', usage(1_000_000, 0, 0)),
-    ]), 'usd')
+    ]))
     expect(value.byTariff.offpeak).toBeGreaterThan(0)
     expect(value.byTariff.peak).toBe(0)
   })
 
   it('counts an unpriced model without inventing money for it', () => {
-    const value = view(fold([
+    const value = priced(fold([
       stepStart(before),
       header(before, 'mystery-model'),
       message(before + 10, 'mystery-model', usage(500, 0, 500)),
-    ]), 'usd')
+    ]))
     expect(value.cost).toBe(0)
     expect(value.requests).toBe(1)
     expect(value.unpricedRequests).toBe(1)
@@ -160,34 +166,42 @@ describe('the projected value', () => {
   ])
 
   it('splits cost by billed bucket, summing to the total', () => {
-    const value = view(session(), 'usd')
+    const value = priced(session())
     expect(value.byBucket.miss + value.byBucket.hit + value.byBucket.out).toBeCloseTo(value.cost, 10)
     expect(value.byBucket.hit).toBeGreaterThan(0)
   })
 
   it('prices the counterfactuals off the same tokens', () => {
-    const value = view(session(), 'usd')
+    const value = priced(session())
     expect(value.counterfactual.peak).toBeCloseTo(value.counterfactual.offpeak * 2, 8)
     expect(value.counterfactual.offpeak).toBeCloseTo(value.cost, 10)
     // Every cache hit repriced as a miss: strictly more expensive.
     expect(value.counterfactual.noCache).toBeGreaterThan(value.cost)
   })
 
-  it('answers in the requested currency', () => {
-    expect(view(session(), 'cny').currency).toBe('cny')
-    expect(view(session(), 'cny').cost).toBeGreaterThan(view(session(), 'usd').cost)
+  it('prices both published rate cards, never converting between them', () => {
+    const value = view(session())
+    expect(Object.keys(value.money).sort()).toEqual(['cny', 'usd'])
+    // The two tables are independent, so neither is a fixed multiple of the other.
+    expect(value.money.cny.cost).toBeGreaterThan(value.money.usd.cost)
+    expect(value.money.usd.byBucket.hit).toBeGreaterThan(0)
+    expect(value.preferred).toBe('auto')
+    expect(view(session(), 'cny').preferred).toBe('cny')
   })
 
   it('passes its own schema, and rejects a broken fold', () => {
-    expect(() => schema.parse(view(session(), 'usd'))).not.toThrow()
-    expect(() => schema.parse({ ...view(session(), 'usd'), cost: Number.NaN })).toThrow(/cost/)
-    expect(() => schema.parse({ cost: 1, models: [] })).toThrow()
+    const value = view(session())
+    expect(() => schema.parse(value)).not.toThrow()
+    expect(() => schema.parse({ ...value, money: { ...value.money, usd: { ...value.money.usd, cost: Number.NaN } } }))
+      .toThrow(/money.usd.cost/)
+    expect(() => schema.parse({ ...value, money: { usd: value.money.usd } })).toThrow(/money.cny/)
+    expect(() => schema.parse({ requests: 1, models: [] })).toThrow()
   })
 
   it('is plain JSON, as the persisted projection cache requires', () => {
     const state = session()
     expect(JSON.parse(JSON.stringify(state))).toEqual(state)
-    const value = view(state, 'usd')
+    const value = view(state)
     expect(JSON.parse(JSON.stringify(value))).toEqual(value)
   })
 })

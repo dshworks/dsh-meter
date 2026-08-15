@@ -1,0 +1,41 @@
+# dsh-meter
+
+> A DeepSeek Harness (dsh) Web UI plugin that meters what a session costs
+> under DeepSeek's time-of-use pricing: one line in the composer dock with
+> the session total, the tariff in force, and the countdown to the next
+> change, plus a hover card with a local-time tariff clock, the
+> cache/input/output split, and the account balance.
+
+DeepSeek moved to time-of-use billing at 16:00 UTC on 2026-08-16: peak
+windows 01:00-04:00 and 06:00-10:00 UTC, off-peak at half the peak rate.
+Each request is priced at the tariff in force when it was **dispatched**,
+so a session spanning a boundary is billed correctly on both sides.
+
+Money is computed against both published rate cards (USD for the
+international platform, CNY for the mainland one). They are independent
+tables, never converted; the account's own `/user/balance` currency
+decides which side is shown.
+
+Install: `dsh plugin --profile web add github:dshworks/dsh-meter`
+
+## Docs
+
+- [README](README.md): what it shows, the rate card, how the money is counted, configuration, limitations
+- [README (Chinese)](README.zh.md): the same, in Chinese
+- [CHANGELOG](CHANGELOG.md): what each release changed and why
+- [SECURITY](SECURITY.md): the one network call, how the API key is resolved, how to turn it off
+- [CONTRIBUTING](CONTRIBUTING.md): the generated-bundle rule and what a PR needs
+
+## Source
+
+- [lib/core.js](lib/core.js): the published rate card, the tariff clock, and the pure session-log fold — the single source of both halves
+- [lib/balance.js](lib/balance.js): the TTL-cached `GET /user/balance` reader and its error taxonomy
+- [lib/index.js](lib/index.js): host plugin — registers the `costMeter` session projection and the `/dsh-meter/balance` route
+- [src/ui.js](src/ui.js): browser surface — the composer-dock line, the hover card, and the locale dictionaries
+- [scripts/build-client.mjs](scripts/build-client.mjs): inlines core + ui into `lib/client.js`, the bundle dsh serves; `--check` fails when stale
+
+## Optional
+
+- [tests/ledger.spec.mjs](tests/ledger.spec.mjs): the fold's contract, including chunk-then-message replacement and boundary-crossing sessions
+- [tests/tariff.spec.mjs](tests/tariff.spec.mjs): the rate card and the tariff clock
+- [tests/balance.spec.mjs](tests/balance.spec.mjs): the balance reader's caching, coalescing, and failure modes

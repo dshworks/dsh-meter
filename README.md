@@ -28,7 +28,7 @@ dsh --profile web
 </td>
 <td width="55%" valign="top">
 
-<img src="docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="100%">
+<img src="docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="460">
 
 </td>
 </tr>

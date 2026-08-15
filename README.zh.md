@@ -19,7 +19,7 @@
 </td>
 <td width="58%" valign="top">
 
-<img src="docs/meter-light.png" alt="输入框下方的计价行与展开的卡片：会话总价、时段表、缓存与输入拆解、账户余额" width="420">
+<img src="https://raw.githubusercontent.com/dshworks/dsh-meter/main/docs/meter-light.png" alt="输入框下方的计价行与展开的卡片：会话总价、时段表、缓存与输入拆解、账户余额" width="420">
 
 </td>
 </tr>
@@ -45,7 +45,7 @@ dsh --profile web
 
 悬停或聚焦展开卡片。处在高峰时段时，档位用琥珀色标出，倒计时指向下一个空闲时段：
 
-<img src="docs/meter-dark.png" alt="暗色主题下处于高峰时段的同一张卡片" width="620">
+<img src="https://raw.githubusercontent.com/dshworks/dsh-meter/main/docs/meter-dark.png" alt="暗色主题下处于高峰时段的同一张卡片" width="620">
 
 | 卡片里有什么 | 为什么值得占这个位置 |
 |---|---|

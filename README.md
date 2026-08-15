@@ -23,7 +23,7 @@ cache economics, and your balance.
 </td>
 <td width="58%" valign="top">
 
-<img src="docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="420">
+<img src="https://raw.githubusercontent.com/dshworks/dsh-meter/main/docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="420">
 
 </td>
 </tr>
@@ -54,7 +54,7 @@ cost plugin has to do to append to it.
 Hover or focus for the card. Inside a peak window the tariff is called
 out in amber and the countdown runs to the next off-peak hour:
 
-<img src="docs/meter-dark.png" alt="The same card in dark mode inside a peak window" width="620">
+<img src="https://raw.githubusercontent.com/dshworks/dsh-meter/main/docs/meter-dark.png" alt="The same card in dark mode inside a peak window" width="620">
 
 | The card shows | Why it is there |
 |---|---|

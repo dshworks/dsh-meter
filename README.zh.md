@@ -12,10 +12,6 @@
 
 输入框下面一行：这个会话花了多少、当前是哪一档、还有多久换档。悬停展开卡片，里面是时段表、缓存的经济账，以及账户余额。
 
-```sh
-dsh plugin --profile web add github:dshworks/dsh-meter
-```
-
 [![ci](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml)
 [![powered by dsh](https://img.shields.io/badge/powered__by-dsh-4D6BFE?logo=deepseek)](https://github.com/deepseek-ai/deepseek-harness)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -28,6 +24,15 @@ dsh plugin --profile web add github:dshworks/dsh-meter
 </td>
 </tr>
 </table>
+
+## 安装
+
+```sh
+dsh plugin --profile web add github:dshworks/dsh-meter
+dsh --profile web
+```
+
+`dsh plugin` 转发给 pnpm，因此 PATH 里要有 pnpm。除此之外无需配置：会话产生第一次计费请求后，计价行就会出现在输入框下方。
 
 ## 那一行
 

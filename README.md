@@ -16,10 +16,6 @@ One line under the composer: what this session cost, which tariff is
 running, how long until it flips. Hover it for the tariff clock, the
 cache economics, and your balance.
 
-```sh
-dsh plugin --profile web add github:dshworks/dsh-meter
-```
-
 [![ci](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml)
 [![powered by dsh](https://img.shields.io/badge/powered__by-dsh-4D6BFE?logo=deepseek)](https://github.com/deepseek-ai/deepseek-harness)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -32,6 +28,17 @@ dsh plugin --profile web add github:dshworks/dsh-meter
 </td>
 </tr>
 </table>
+
+## Install
+
+```sh
+dsh plugin --profile web add github:dshworks/dsh-meter
+dsh --profile web
+```
+
+`dsh plugin` forwards to pnpm, so pnpm must be on PATH. Nothing else to
+configure: the meter appears under the composer as soon as a session bills
+its first request.
 
 ## The line
 

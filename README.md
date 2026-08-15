@@ -1,6 +1,6 @@
 <table>
 <tr>
-<td width="45%" valign="top">
+<td width="42%" valign="top">
 
 # dsh-meter
 
@@ -18,7 +18,6 @@ cache economics, and your balance.
 
 ```sh
 dsh plugin --profile web add github:dshworks/dsh-meter
-dsh --profile web
 ```
 
 [![ci](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml)
@@ -26,7 +25,7 @@ dsh --profile web
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 </td>
-<td width="55%" valign="top">
+<td width="58%" valign="top">
 
 <img src="docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="460">
 

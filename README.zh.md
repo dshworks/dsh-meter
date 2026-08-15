@@ -1,6 +1,6 @@
 <table>
 <tr>
-<td width="45%" valign="top">
+<td width="42%" valign="top">
 
 # dsh-meter
 
@@ -14,7 +14,6 @@
 
 ```sh
 dsh plugin --profile web add github:dshworks/dsh-meter
-dsh --profile web
 ```
 
 [![ci](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml)
@@ -22,7 +21,7 @@ dsh --profile web
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 </td>
-<td width="55%" valign="top">
+<td width="58%" valign="top">
 
 <img src="docs/meter-light.png" alt="输入框下方的计价行与展开的卡片：会话总价、时段表、缓存与输入拆解、账户余额" width="460">
 

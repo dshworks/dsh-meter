@@ -23,7 +23,7 @@ cache economics, and your balance.
 </td>
 <td width="58%" valign="top">
 
-<img src="docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="460">
+<img src="docs/meter-light.png" alt="The meter's line under the composer, with its card open: session total, tariff clock, cache and input breakdown, and account balance" width="420">
 
 </td>
 </tr>

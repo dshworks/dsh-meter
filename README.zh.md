@@ -19,7 +19,7 @@
 </td>
 <td width="58%" valign="top">
 
-<img src="docs/meter-light.png" alt="输入框下方的计价行与展开的卡片：会话总价、时段表、缓存与输入拆解、账户余额" width="460">
+<img src="docs/meter-light.png" alt="输入框下方的计价行与展开的卡片：会话总价、时段表、缓存与输入拆解、账户余额" width="420">
 
 </td>
 </tr>

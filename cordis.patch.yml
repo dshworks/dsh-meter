@@ -1,0 +1,7 @@
+# dsh-meter bundle patch: mount the cost projection as one composition row.
+# The host half needs the session-projection registry (@deepseek-ai/dsh-session-projection,
+# present in the stock web profile); without it the plugin loads as a no-op.
+# The Web UI half is discovered from package.json's `dsh.client` declaration.
+- insert:
+    - id: dsh-meter
+      name: 'dsh-meter'

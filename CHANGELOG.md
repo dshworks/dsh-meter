@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4 — 2026-08-17
 
 The switchover happened, and the rate card was already right.
 

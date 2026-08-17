@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM,
+  CACHE_DISCOUNT, CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM,
   bucketCostOf, costOf, formatCountdown, formatMoney, formatTokens,
   nextTariffChange, tariffAt, tariffSchedule,
 } from '../lib/core.js'
@@ -31,6 +31,21 @@ describe('the published rate card', () => {
         }
       }
     }
+  })
+
+  it('never claims a bigger cache discount than the cheapest live row gives', () => {
+    // The card tells the user a hit bills at 1/CACHE_DISCOUNT of a miss. If any
+    // billed row is stingier than that, the claim over-promises and the number
+    // has to come down — which is the whole reason it is derived, not typed.
+    for (const model of Object.keys(RATES)) {
+      for (const tariff of ['offpeak', 'peak']) {
+        for (const currency of ['usd', 'cny']) {
+          const rate = RATES[model][tariff][currency]
+          expect(rate.miss / rate.hit).toBeGreaterThanOrEqual(CACHE_DISCOUNT)
+        }
+      }
+    }
+    expect(CACHE_DISCOUNT).toBe(30)
   })
 
   it('makes every new rate higher than the flat rate it replaces', () => {

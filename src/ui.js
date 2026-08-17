@@ -51,7 +51,7 @@ const en = {
   'meter.balanceEmpty': 'this account cannot spend right now',
   'meter.balanceRejected': 'balance: the API key was rejected',
   'meter.cacheSaved': 'Cache reuse saved {amount} — {percent}% of prompt tokens were hits.',
-  'meter.cacheCold': 'No cache hits yet. A stable prompt prefix bills at 1/50 of the miss rate.',
+  'meter.cacheCold': 'No cache hits yet. A stable prompt prefix bills at 1/{factor} of the miss rate.',
   'meter.ifPeak': 'Same tokens all-peak {peak}, all-off-peak {offpeak}.',
   'meter.ifNewRates': 'Under the rates starting {date}: {offpeak} off-peak, {peak} peak.',
   'meter.unpriced': '{count} requests on {models} have no published rate and are not counted.',
@@ -78,7 +78,7 @@ const zh = {
   'meter.balanceEmpty': '该账号当前无法扣费',
   'meter.balanceRejected': '余额：API key 被拒绝',
   'meter.cacheSaved': '缓存复用省下 {amount}——{percent}% 的输入命中缓存。',
-  'meter.cacheCold': '尚无缓存命中。前缀稳定时命中价仅为未命中价的 1/50。',
+  'meter.cacheCold': '尚无缓存命中。前缀稳定时命中价仅为未命中价的 1/{factor}。',
   'meter.ifPeak': '同样的 token 全高峰 {peak}，全空闲 {offpeak}。',
   'meter.ifNewRates': '{date} 起的新价：空闲 {offpeak}，高峰 {peak}。',
   'meter.unpriced': '{count} 次请求使用 {models}，无公开价格，未计入。',
@@ -395,7 +395,7 @@ function MeterCard({ value, balance, currency, now, t, position }) {
   if (value.tokens.hit > 0) {
     notes.push(t('meter.cacheSaved', { amount: formatMoney(saved, currency), percent: hitShare }))
   } else if (promptTokens > 0) {
-    notes.push(t('meter.cacheCold'))
+    notes.push(t('meter.cacheCold', { factor: CACHE_DISCOUNT }))
   }
   if (clock.tariff === 'flat') {
     notes.push(t('meter.ifNewRates', {

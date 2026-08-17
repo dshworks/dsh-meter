@@ -16,6 +16,7 @@ One line under the composer: what this session cost, which tariff is
 running, how long until it flips. Hover it for the tariff clock, the
 cache economics, and your balance.
 
+[![site](https://img.shields.io/badge/site-dsh.works%2Fdsh--meter-00c2e9)](https://dsh.works/dsh-meter/)
 [![ci](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dshworks/dsh-meter/actions/workflows/ci.yml)
 [![powered by dsh](https://img.shields.io/badge/powered__by-dsh-4D6BFE?logo=deepseek)](https://github.com/deepseek-ai/deepseek-harness)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -60,7 +61,7 @@ out in amber and the countdown runs to the next off-peak hour:
 |---|---|
 | The session total, request count, models | The number, once, at full size |
 | A 24-hour tariff strip in **your** local time, with a live now-marker | Peak windows are published in UTC. Reading them off a strip beats doing timezone arithmetic at 11pm |
-| cache hits / fresh input / output — tokens and money on each | A cache hit costs **1/50th** of a miss. This is the row that shows whether your prompt prefix is stable |
+| cache hits / fresh input / output — tokens and money on each | A cache hit costs **1/30th** of a miss. This is the row that shows whether your prompt prefix is stable |
 | Your account balance, and how much of it is granted credit | Granted balance expires; topped-up balance does not |
 | The same tokens priced under the other tariff | Before the switchover: what the new rates do to this session. After: what waiting for off-peak is worth |
 | What the cache saved | The counterfactual where every hit had been a miss |
@@ -77,7 +78,7 @@ session on DeepSeek-V4-Pro — not a mock:
 | Survives a restart | Server restarted, session reopened cold — the projection replays from the durable log at the same figure |
 | Both themes, both tariff states | Light and dark, flat and peak, captured above — this predates the 08-16 switchover, so the flat readout is one a new session no longer reaches |
 | Currency detection | A live account returns `{"currency":"cny", ...}` and the whole surface switches to ¥ with no configuration |
-| 47 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the balance reader, and the generated-bundle sync check |
+| 50 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the balance reader, and the generated-bundle sync check |
 
 ## Two currencies, no conversion
 
@@ -112,7 +113,7 @@ Carried verbatim in [`lib/core.js`](lib/core.js), per 1M tokens.
 Peak is **01:00–04:00 and 06:00–10:00 UTC** (09:00–12:00 and 14:00–18:00
 Beijing). Every other hour is off-peak, including the two-hour gap
 between the windows. Off-peak is exactly half of peak — and still above
-the flat rate it replaced, by about 2.4x on output.
+the flat rate it replaced, by about 2.3x on output.
 
 <details>
 <summary>The retired flat card, kept to reprice history</summary>
@@ -206,7 +207,8 @@ drifts from it.
   their model named; the card reports them as unpriced instead of quietly
   applying DeepSeek's rates to someone else's API.
 - **The rate card is compiled in.** DeepSeek changes prices; this plugin
-  ships a snapshot taken 2026-08-13 and needs a release to follow one.
+  ships the time-of-use card as re-checked on 2026-08-17 and needs a
+  release to follow the next change.
 - **Web only.** The projection is available to any surface, but the
   readout is built for the Web UI. There is no TUI line.
 

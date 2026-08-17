@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-meter — the DeepSeek time-of-use meter for dsh</title>
+<meta name="description" content="DeepSeek bills by the hour since 2026-08-16. dsh-meter puts one line under the dsh composer: what this session cost, which tariff is running, when it flips, and the account balance behind it. Both published rate cards, no exchange-rate guessing. Not affiliated with DeepSeek.">
+<meta name="keywords" content="dsh plugin, deepseek harness, deepseek cost, deepseek pricing, time-of-use, peak off-peak, token cost, deepseek balance">
+<meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://dsh.works/dsh-meter/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="dsh.works">
+<meta property="og:title" content="dsh-meter — the DeepSeek time-of-use meter for dsh">
+<meta property="og:description" content="One line under the composer: what this session cost, which tariff is running, how long until it flips. Both published rate cards, priced at dispatch time.">
+<meta property="og:url" content="https://dsh.works/dsh-meter/">
+<meta property="og:image" content="https://dsh.works/dsh-meter/meter-dark.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="dsh-meter — the DeepSeek time-of-use meter for dsh">
+<meta name="twitter:description" content="One line under the composer: what this session cost, which tariff is running, how long until it flips.">
+<meta name="twitter:image" content="https://dsh.works/dsh-meter/meter-dark.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23000'/%3E%3Ctext x='32' y='46' font-family='ui-monospace,monospace' font-size='42' font-weight='700' fill='%2300c2e9' text-anchor='middle'%3E%C2%A5%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<script>try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication",
+ "name":"dsh-meter","applicationCategory":"DeveloperApplication",
+ "operatingSystem":"Any","license":"https://opensource.org/licenses/MIT",
+ "url":"https://dsh.works/dsh-meter/",
+ "codeRepository":"https://github.com/dshworks/dsh-meter",
+ "description":"A DeepSeek Harness (dsh) Web UI plugin that meters what a session costs under DeepSeek's time-of-use pricing: session total, tariff in force, countdown to the next change, and the account balance.",
+ "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
+<style>
+/* dsh-meter — the house material: black, one mono face, cyan and pink,
+ * 3px corners. Same tokens as dsh.works and thevibeworks.github.io/deepseek-cli.
+ *
+ * Every colour is a custom property declared twice — the dark value alone,
+ * then the light-dark() pair. A browser without light-dark() keeps the dark
+ * value and the page still works. No colour lives anywhere else. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #000000;
+  --bg: light-dark(#fbfaf7, #000000);
+  --surface: #0d0d0d;
+  --surface: light-dark(#f2f1ec, #0d0d0d);
+  --surface-2: #141414;
+  --surface-2: light-dark(#e8e7e0, #141414);
+  --line: #262626;
+  --line: light-dark(#d4d1c7, #262626);
+  --text: #e8e8e8;
+  --text: light-dark(#17171a, #e8e8e8);
+  --muted: #9a9a9a;
+  --muted: light-dark(#5a5a60, #9a9a9a);
+  --strong: #ffffff;
+  --strong: light-dark(#000000, #ffffff);
+
+  /* Accents are not shared between themes: the dark set is tuned for black
+   * and fails 4.5:1 on paper, so the light values are measured equivalents. */
+  --cyan: #00c2e9;
+  --cyan: light-dark(#0a6e85, #00c2e9);
+  --pink: #e41478;
+  --pink: light-dark(#bd0e60, #e41478);
+  --yellow: #ffd53d;
+  --yellow: light-dark(#7a5200, #ffd53d);
+
+  --masthead-bg: rgba(0, 0, 0, 0.9);
+  --masthead-bg: light-dark(rgba(251, 250, 247, 0.9), rgba(0, 0, 0, 0.9));
+
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --measure: 68ch;
+  --dur-fast: 140ms;
+  --ease: cubic-bezier(0.25, 0, 0.2, 1);
+}
+:root[data-theme="light"] { color-scheme: only light; }
+:root[data-theme="dark"] { color-scheme: only dark; }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.6 var(--mono);
+  font-variant-ligatures: none;
+}
+
+.wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.5rem; }
+/* Prose gets the measure; everything structural gets the full column. The
+ * override has to name its elements — `main .wrap > *` outranks a bare class,
+ * so a `max-width: none` on `.grid` alone silently loses and the whole page
+ * collapses to 68ch. */
+main .wrap > * { max-width: var(--measure); }
+main .wrap > .hero,
+main .wrap > h2,
+main .wrap > figure,
+main .wrap > .grid,
+main .wrap > .tablewrap,
+main .wrap > .cmd { max-width: none; }
+
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 3px; }
+::selection { background: var(--cyan); color: var(--bg); }
+
+h1, h2, h3 { color: var(--strong); line-height: 1.25; font-weight: 700; }
+h1 { font-size: clamp(1.5rem, 4.2vw, 2rem); letter-spacing: -0.01em; margin: 0 0 1rem; }
+h2 {
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em;
+  margin: 3.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line);
+  max-width: none;
+}
+h3 { font-size: 0.95rem; margin: 0 0 0.4rem; }
+p { margin: 0 0 1rem; }
+.caret { color: var(--cyan); }
+.lede { color: var(--muted); }
+.lede strong { color: var(--text); font-weight: 400; }
+.fine { color: var(--muted); font-size: 0.85rem; }
+
+code { background: var(--surface-2); border-radius: 3px; padding: 0 4px; font-size: 0.95em; }
+
+.skip {
+  position: absolute; left: 1.5rem; top: -3rem; z-index: 20;
+  background: var(--cyan); color: var(--bg); padding: 0.4rem 0.7rem; border-radius: 3px;
+}
+.skip:focus { top: 0.5rem; }
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--masthead-bg); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.masthead .wrap {
+  display: flex; align-items: center; gap: 1rem;
+  padding-top: 0.75rem; padding-bottom: 0.75rem;
+}
+.brand { color: var(--strong); font-weight: 700; white-space: nowrap; }
+.brand:hover { text-decoration: none; }
+.brand .tld { color: var(--muted); font-weight: 400; }
+.bar-end { display: flex; align-items: center; gap: 1rem; margin-left: auto; min-width: 0; }
+.sitenav { display: flex; gap: 1rem; overflow-x: auto; scrollbar-width: none; }
+.sitenav::-webkit-scrollbar { display: none; }
+.sitenav a { color: var(--muted); white-space: nowrap; }
+.sitenav a:hover { color: var(--cyan); }
+.themetoggle {
+  background: none; border: 1px solid var(--line); border-radius: 3px;
+  color: var(--muted); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.5rem;
+  cursor: pointer; white-space: nowrap; transition: border-color var(--dur-fast) var(--ease);
+}
+.themetoggle:hover { border-color: var(--cyan); color: var(--cyan); }
+
+/* ---------- split hero ---------- */
+
+/* Left column argues, right column demonstrates. The demonstration is the
+ * real instrument — same clock, same rate card, the reader's own timezone —
+ * so the page cannot claim anything the plugin would not show. */
+.hero {
+  max-width: none; padding: 3.25rem 0 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 21rem);
+  gap: 2.5rem; align-items: start;
+}
+/* The pitch keeps a reading measure; the eyebrow and the command line do not.
+ * A `ch` cap on a 0.85rem command clips it at 46 of its own narrow characters,
+ * and an install command with its tail cut off reads as a broken page. */
+.hero-copy > * { max-width: 46ch; }
+.hero-copy > .eyebrow, .hero-copy > .cmd { max-width: none; }
+.eyebrow {
+  color: var(--pink); font-size: 0.75rem; letter-spacing: 0.12em;
+  text-transform: uppercase; margin: 0 0 0.75rem;
+}
+.cta { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0 0; }
+.btn {
+  border: 1px solid var(--cyan); border-radius: 3px; padding: 0.45rem 1rem;
+  background: var(--cyan); color: var(--bg); font-weight: 700;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.btn:hover { text-decoration: none; opacity: 0.85; }
+.btn.alt { background: none; color: var(--cyan); border-color: var(--line); }
+.btn.alt:hover { border-color: var(--cyan); opacity: 1; }
+
+.cmd {
+  border: 1px solid var(--line); border-radius: 3px; background: var(--surface);
+  padding: 0.7rem 0.9rem; margin: 1.5rem 0 0; overflow-x: auto;
+  font-size: 0.85rem; white-space: pre;
+}
+.cmd .p { color: var(--pink); }
+
+/* ---------- the instrument ---------- */
+
+/* Built like the plugin's own card: labels are chrome (10px, uppercase,
+ * tracked), numerals are the subject, sections divide on hairlines and never
+ * nest boxes, and colour carries two meanings only — amber is peak, cyan is
+ * the one moving part. */
+.instrument {
+  border: 1px solid var(--line); border-radius: 3px; background: var(--surface);
+  font-size: 0.85rem; position: sticky; top: 4.5rem;
+}
+.instrument > * { padding: 0.85rem 1rem; }
+.instrument > * + * { border-top: 1px solid var(--line); }
+.instrument .k {
+  display: block; color: var(--muted);
+  font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.inst-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.inst-head .tz { color: var(--muted); font-size: 0.7rem; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.inst-now .state { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-top: 0.2rem; }
+.inst-now .tariff {
+  color: var(--strong); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.inst-now .tariff.peak { color: var(--yellow); }
+.inst-now .flip { color: var(--muted); font-size: 0.75rem; text-align: right; }
+.inst-now .flip b { color: var(--cyan); font-weight: 400; font-variant-numeric: tabular-nums; }
+
+.strip { display: flex; gap: 2px; margin-top: 0.6rem; position: relative; }
+.strip .cell { flex: 1; height: 10px; border-radius: 1px; background: var(--surface-2); }
+.strip .cell.peak { background: var(--yellow); }
+.strip .now {
+  position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--cyan);
+  transition: left var(--dur-fast) var(--ease);
+}
+.axis {
+  display: flex; justify-content: space-between;
+  color: var(--muted); font-size: 0.65rem; margin-top: 0.25rem;
+}
+
+.inst-rates { margin: 0; }
+.inst-rates dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.75rem; margin: 0.45rem 0 0; }
+.inst-rates dt { color: var(--muted); font-size: 0.7rem; }
+.inst-rates dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.inst-foot { color: var(--muted); font-size: 0.7rem; }
+.inst-foot p { margin: 0; }
+
+/* ---------- shot ---------- */
+
+figure { margin: 0 0 1rem; max-width: none; }
+figure img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--line); border-radius: 3px;
+}
+figcaption { color: var(--muted); font-size: 0.8rem; margin-top: 0.5rem; }
+
+/* ---------- grid, tables ---------- */
+
+.grid { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: 1px; max-width: none; }
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: var(--line); border: 1px solid var(--line); border-radius: 3px;
+}
+.grid.two > li { background: var(--bg); padding: 1.1rem 1.2rem; }
+.grid p:last-child { margin-bottom: 0; }
+.grid .n { color: var(--pink); font-size: 0.75rem; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+.tablewrap { overflow-x: auto; max-width: none; margin: 0 0 1rem; }
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+thead th { color: var(--muted); font-weight: 400; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+tbody th { font-weight: 700; color: var(--strong); white-space: nowrap; }
+tbody th .t { color: var(--muted); font-weight: 400; }
+tbody tr.peak th .t { color: var(--yellow); }
+td { font-variant-numeric: tabular-nums; }
+
+.note {
+  border-left: 2px solid var(--pink); padding: 0.1rem 0 0.1rem 1rem;
+  color: var(--muted); margin: 0 0 1rem;
+}
+.note strong { color: var(--text); }
+
+footer {
+  margin-top: 4rem; border-top: 1px solid var(--line);
+  padding-top: 1.25rem; padding-bottom: 3rem; color: var(--muted); font-size: 0.85rem;
+}
+footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+
+@media (max-width: 60rem) {
+  /* The instrument stops being a column and becomes the block right under
+   * the pitch. It stays above the fold on a phone, which is the point of it.
+   *
+   * minmax(0, 1fr), never a bare 1fr: a bare 1fr floors the column at its
+   * content's min-content width, and the install command in here is
+   * `white-space: pre`. That floor is how a document starts scrolling
+   * sideways, which nothing on this site is allowed to do. */
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .instrument { position: static; }
+}
+@media (max-width: 52rem) {
+  .masthead .wrap { flex-wrap: wrap; gap: 0.5rem 1rem; }
+  .bar-end { width: 100%; margin-left: 0; order: 2; }
+  .themetoggle { margin-left: auto; }
+  .sitenav { mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 2rem), transparent 100%); }
+  .grid.two { grid-template-columns: 1fr; }
+}
+@media (max-width: 40rem) {
+  body { font-size: 14px; }
+  .hero { padding-top: 2.25rem; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="brand" href="https://dsh.works/"><span class="caret">&gt;</span> dsh<span class="tld">.works</span></a>
+    <div class="bar-end">
+      <nav class="sitenav" aria-label="Sections">
+        <a href="#install">install</a>
+        <a href="#proof">proof</a>
+        <a href="#rates">rates</a>
+        <a href="https://dsh.works/awesome-dsh-plugins/">registry</a>
+        <a href="https://github.com/dshworks/dsh-meter">github&nbsp;&#8599;</a>
+      </nav>
+      <button class="themetoggle" id="theme-toggle" type="button" hidden
+              aria-label="Theme: auto. Click to change.">theme:&nbsp;<span class="val">auto</span></button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">dsh plugin &middot; MIT &middot; not affiliated with DeepSeek</p>
+    <h1>DeepSeek bills by the hour now. This is the meter for it.</h1>
+    <p class="lede">Two peak windows a day, off-peak at half the peak rate. Cost
+    stopped being a number you read afterwards and became <strong>a rate you are
+    standing in</strong>.</p>
+    <p class="lede">One line under the dsh composer: what this session cost, which
+    tariff is running, how long until it flips. Hover it for the tariff clock, the
+    cache economics, and your balance.</p>
+
+    <div class="cmd"><span class="p">$</span> dsh plugin --profile web add @dshworks/dsh-meter</div>
+
+    <div class="cta">
+      <a class="btn" href="#install">Install</a>
+      <a class="btn alt" href="https://github.com/dshworks/dsh-meter">GitHub</a>
+      <a class="btn alt" href="https://www.npmjs.com/package/@dshworks/dsh-meter">npm</a>
+    </div>
+  </div>
+
+  <aside class="instrument" id="instrument" aria-label="The DeepSeek tariff running right now">
+    <div class="inst-head">
+      <span class="k">tariff right now</span>
+      <span class="tz" id="inst-tz">UTC</span>
+    </div>
+
+    <div class="inst-now">
+      <div class="state">
+        <span class="tariff" id="inst-tariff">off-peak</span>
+        <span class="flip" id="inst-flip">peak <b>01:00&ndash;04:00</b> and <b>06:00&ndash;10:00</b> UTC</span>
+      </div>
+      <div class="strip" id="inst-strip"><span class="cell offpeak" title="00:00 UTC — off-peak"></span><span class="cell peak" title="01:00 UTC — peak"></span><span class="cell peak" title="02:00 UTC — peak"></span><span class="cell peak" title="03:00 UTC — peak"></span><span class="cell offpeak" title="04:00 UTC — off-peak"></span><span class="cell offpeak" title="05:00 UTC — off-peak"></span><span class="cell peak" title="06:00 UTC — peak"></span><span class="cell peak" title="07:00 UTC — peak"></span><span class="cell peak" title="08:00 UTC — peak"></span><span class="cell peak" title="09:00 UTC — peak"></span><span class="cell offpeak" title="10:00 UTC — off-peak"></span><span class="cell offpeak" title="11:00 UTC — off-peak"></span><span class="cell offpeak" title="12:00 UTC — off-peak"></span><span class="cell offpeak" title="13:00 UTC — off-peak"></span><span class="cell offpeak" title="14:00 UTC — off-peak"></span><span class="cell offpeak" title="15:00 UTC — off-peak"></span><span class="cell offpeak" title="16:00 UTC — off-peak"></span><span class="cell offpeak" title="17:00 UTC — off-peak"></span><span class="cell offpeak" title="18:00 UTC — off-peak"></span><span class="cell offpeak" title="19:00 UTC — off-peak"></span><span class="cell offpeak" title="20:00 UTC — off-peak"></span><span class="cell offpeak" title="21:00 UTC — off-peak"></span><span class="cell offpeak" title="22:00 UTC — off-peak"></span><span class="cell offpeak" title="23:00 UTC — off-peak"></span></div>
+      <div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+    </div>
+
+    <div class="inst-rates">
+      <span class="k">deepseek-v4-pro &middot; per 1M tokens</span>
+      <dl>
+        <dt>cache hit</dt><dd id="rate-hit">&mdash;</dd>
+        <dt>cache miss</dt><dd id="rate-miss">&mdash;</dd>
+        <dt>output</dt><dd id="rate-out">&mdash;</dd>
+      </dl>
+    </div>
+
+    <div class="inst-foot">
+      <p>This clock is <code>lib/core.js</code> &mdash; the file the plugin ships,
+      running in your browser. Nothing on this page types a price by hand.</p>
+    </div>
+  </aside>
+</section>
+
+<h2 id="proof">What it looks like in place</h2>
+
+<figure>
+  <img src="meter-dark.png" width="1316" height="903" loading="lazy"
+       alt="The dsh web UI with the meter's line under the composer reading ¥0.0672, peak, off-peak in 48m, and its card open above showing the session total, a 24-hour tariff strip, the cache/input/output split, and the account balance.">
+  <figcaption>The line sits under the harness's own stats row &mdash; it adds a row,
+  it does not shadow the shipped one. Captured on dsh <code>0.1.0-rc.6</code>,
+  2026-08-15: the clock is live, the money is flat-rate, because the session
+  predates the switchover the next section describes.</figcaption>
+</figure>
+
+<ul class="grid two">
+  <li>
+    <p class="n">two currencies, no conversion</p>
+    <p>DeepSeek publishes two independent rate cards, USD and CNY, and neither is a
+    conversion of the other &mdash; so a meter that picks with an exchange rate is
+    wrong twice. This one computes both and lets <code>/user/balance</code> say
+    which one your account is billed in.</p>
+  </li>
+  <li>
+    <p class="n">priced at dispatch, not at finish</p>
+    <p>A request sent at 00:59 UTC is billed off-peak even if it streams into the
+    peak window. A session that spans a boundary is billed correctly on both
+    sides.</p>
+  </li>
+  <li>
+    <p class="n">the agent never sees it</p>
+    <p>No tool, no system-prompt section, no message, no model call. The plugin does
+    not touch the request, so it costs zero tokens and cannot move your KV cache.
+    Cost belongs to the person paying.</p>
+  </li>
+  <li>
+    <p class="n">estimate, and it says so</p>
+    <p>List prices times provider-reported tokens, folded from the durable session
+    log &mdash; it survives paging, compaction and a server restart. Checked against
+    a real bill: 188,542 cache-miss tokens on pro, off-peak, settled at
+    &yen;0.84 &mdash; &yen;4.46/1M against the published 4.5.</p>
+  </li>
+</ul>
+
+<h2 id="rates">The rate card it carries</h2>
+
+<div class="tablewrap">
+<table>
+  <thead>
+    <tr><th scope="col">per 1M tokens</th><th scope="col">cache hit</th><th scope="col">cache miss</th><th scope="col">output</th></tr>
+  </thead>
+  <tbody>
+<tr><th scope="row">v4-flash <span class="t">off-peak</span></th><td>$0.007 / ¥0.05</td><td>$0.22 / ¥1.5</td><td>$0.66 / ¥4.5</td></tr>
+<tr class="peak"><th scope="row">v4-flash <span class="t">peak</span></th><td>$0.014 / ¥0.1</td><td>$0.44 / ¥3</td><td>$1.32 / ¥9</td></tr>
+<tr><th scope="row">v4-pro <span class="t">off-peak</span></th><td>$0.022 / ¥0.15</td><td>$0.66 / ¥4.5</td><td>$1.98 / ¥13.5</td></tr>
+<tr class="peak"><th scope="row">v4-pro <span class="t">peak</span></th><td>$0.044 / ¥0.3</td><td>$1.32 / ¥9</td><td>$3.96 / ¥27</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="fine">Peak is 01:00&ndash;04:00 and 06:00&ndash;10:00 UTC (09:00&ndash;12:00
+and 14:00&ndash;18:00 Beijing); every other hour is off-peak, including the two-hour
+gap between the windows. Off-peak is exactly half of peak. A cache hit bills at
+1/30 of a miss, which is the ratio worth designing a prompt around.
+Rates re-checked 2026-08-17 against <a href="https://api-docs.deepseek.com/quick_start/pricing">DeepSeek's pricing page</a>;
+the retired flat card is kept in the plugin so old sessions still cost what they
+actually cost.</p>
+
+<h2 id="install">Install</h2>
+
+<div class="cmd"><span class="p">$</span> dsh plugin --profile web add @dshworks/dsh-meter
+<span class="p">$</span> dsh --profile web</div>
+
+<p><code>dsh plugin</code> forwards to pnpm, so pnpm must be on PATH. Nothing else to
+configure &mdash; the meter appears under the composer as soon as a session bills its
+first request. Node 20+.</p>
+
+<p class="note"><strong>The balance read is optional.</strong> It runs on the host
+against the same credential seam the LLM adapter uses; the browser gets parsed
+numbers and never the key. Set <code>balance: false</code> in your profile to turn it
+off entirely &mdash; the meter keeps working.</p>
+
+<p class="fine">Full documentation, configuration keys and known limitations live in
+the <a href="https://github.com/dshworks/dsh-meter#readme">README</a>
+(<a href="https://github.com/dshworks/dsh-meter/blob/main/README.zh.md">中文</a>).</p>
+
+</div>
+</main>
+
+<footer>
+<div class="wrap">
+  <nav>
+    <a href="https://github.com/dshworks/dsh-meter">repo</a>
+    <a href="https://www.npmjs.com/package/@dshworks/dsh-meter">npm</a>
+    <a href="https://github.com/dshworks/dsh-meter/blob/main/CHANGELOG.md">changelog</a>
+    <a href="https://dsh.works/awesome-dsh-plugins/">plugin registry</a>
+    <a href="https://github.com/deepseek-ai/deepseek-harness">dsh</a>
+  </nav>
+  <p>MIT. A community plugin from <a href="https://github.com/dshworks">dshworks</a> —
+  not affiliated with DeepSeek. Prices are DeepSeek's published list rates; your
+  invoice is authoritative.</p>
+</div>
+</footer>
+
+<script>
+/* The rate card and the tariff clock, verbatim from lib/core.js. Inlined by
+ * scripts/build-site.mjs so the page and the plugin can never disagree. */
+(function () {
+/**
+ * dsh-meter core — the official DeepSeek rate card, the time-of-use clock, and
+ * the pure cost fold.
+ *
+ * This module is the single source of both halves: the host plugin imports it,
+ * and `scripts/build-client.mjs` inlines this exact file into the browser
+ * bundle. A price never exists in two places.
+ *
+ * Money is computed from provider-reported token counts, so it is an estimate
+ * of what DeepSeek will bill, not the invoice. The three billed buckets are
+ * disjoint by the harness `TokenUsage` convention: `inputTokens` is
+ * cache-MISS input (the DeepSeek adapter subtracts hits out of `prompt_tokens`),
+ * `cacheReadTokens` is cache-HIT input, and `outputTokens` already contains
+ * reasoning tokens.
+ */
+
+/* ------------------------------------------------------------------ *
+ * PRICING-TABLE-START — verbatim from
+ * https://api-docs.deepseek.com/quick_start/pricing (re-checked 2026-08-17).
+ * Units: currency per 1M tokens. USD is the international platform's table
+ * and CNY the mainland platform's — they are separate published tables, not
+ * an exchange-rate conversion of each other.
+ *
+ * The switchover has happened: upstream now publishes only the off-peak and
+ * peak rows, in both locales. `flat` is kept because the ledger reprices
+ * history — a session logged before the switchover must still cost what it
+ * actually cost — and `tariffAt` will never return it for a new request.
+ * Confirmed against a real bill, not just the page: 188,542 cache-miss
+ * tokens on pro, off-peak, settled at ¥0.84 — ¥4.46/1M against the
+ * published 4.5, where the flat card would have made it 3.0.
+ * ------------------------------------------------------------------ */
+
+/** Time-of-use billing began at 16:00 UTC on 2026-08-16 (00:00 Beijing, Aug 17). Before it, one flat rate applied all day. */
+const TIME_OF_USE_FROM = Date.UTC(2026, 7, 16, 16, 0, 0)
+
+/**
+ * Peak windows as `[startHourUtc, endHourUtc)` pairs — 01:00-04:00 and
+ * 06:00-10:00 UTC (09:00-12:00 and 14:00-18:00 Beijing). Every other hour is
+ * off-peak, including the two-hour 04:00-06:00 gap between the windows.
+ */
+const PEAK_WINDOWS_UTC = [[1, 4], [6, 10]]
+
+/**
+ * Published rates per 1M tokens, by model, tariff, and currency.
+ * `hit` = cache-hit input, `miss` = cache-miss input, `out` = output.
+ */
+const RATES = {
+  'deepseek-v4-flash': {
+    flat: { usd: { hit: 0.0028, miss: 0.14, out: 0.28 }, cny: { hit: 0.02, miss: 1, out: 2 } },
+    offpeak: { usd: { hit: 0.007, miss: 0.22, out: 0.66 }, cny: { hit: 0.05, miss: 1.5, out: 4.5 } },
+    peak: { usd: { hit: 0.014, miss: 0.44, out: 1.32 }, cny: { hit: 0.1, miss: 3, out: 9 } },
+  },
+  'deepseek-v4-pro': {
+    flat: { usd: { hit: 0.003625, miss: 0.435, out: 0.87 }, cny: { hit: 0.025, miss: 3, out: 6 } },
+    offpeak: { usd: { hit: 0.022, miss: 0.66, out: 1.98 }, cny: { hit: 0.15, miss: 4.5, out: 13.5 } },
+    peak: { usd: { hit: 0.044, miss: 1.32, out: 3.96 }, cny: { hit: 0.3, miss: 9, out: 27 } },
+  },
+}
+/* PRICING-TABLE-END */
+
+/** Tariffs in display order; `flat` is the retired pre-time-of-use single rate. */
+const TARIFFS = ['flat', 'offpeak', 'peak']
+
+/**
+ * How many cache misses one cache hit costs, on the live card — the smallest
+ * such ratio across every model, tariff, and currency still billed, rounded
+ * down so the claim is never larger than the cheapest row supports.
+ *
+ * Derived rather than typed: the flat card discounted a hit 50x on flash and
+ * 120x on pro, time-of-use discounts it 30x, and a hardcoded number in a UI
+ * string is a claim nothing fails when it stops being true. `tests/tariff`
+ * pins it to the table.
+ */
+const CACHE_DISCOUNT = Math.floor(
+  Math.min(...Object.values(RATES).flatMap((byTariff) =>
+    TARIFFS.filter((tariff) => tariff !== 'flat').flatMap((tariff) =>
+      Object.values(byTariff[tariff]).map((rate) => rate.miss / rate.hit)))),
+)
+
+/** Currency symbols for the two published tables. */
+const CURRENCY_SYMBOL = { usd: '$', cny: '¥' }
+
+/**
+ * The tariff a request dispatched at `epochMs` is billed under.
+ * @param {number} epochMs - request dispatch time.
+ * @returns {'flat'|'peak'|'offpeak'} the tariff in force at that instant.
+ */
+function tariffAt(epochMs) {
+  if (epochMs < TIME_OF_USE_FROM) return 'flat'
+  const hour = new Date(epochMs).getUTCHours()
+  for (const [start, end] of PEAK_WINDOWS_UTC) if (hour >= start && hour < end) return 'peak'
+  return 'offpeak'
+}
+
+/**
+ * When the tariff next changes, and to what. Before the switchover the answer
+ * is the switchover itself — that is the next change a user can act on.
+ * @param {number} epochMs - the instant to look forward from.
+ * @returns {{ tariff: string, next: string, at: number }} current tariff, the one that follows, and when it starts.
+ */
+function nextTariffChange(epochMs) {
+  const tariff = tariffAt(epochMs)
+  if (epochMs < TIME_OF_USE_FROM) {
+    return { tariff, next: tariffAt(TIME_OF_USE_FROM), at: TIME_OF_USE_FROM }
+  }
+  const hourMs = 3_600_000
+  const dayStart = Math.floor(epochMs / (24 * hourMs)) * 24 * hourMs
+  const boundaries = []
+  for (const [start, end] of PEAK_WINDOWS_UTC) boundaries.push(start, end)
+  boundaries.sort((a, b) => a - b)
+  for (const hour of boundaries) {
+    const at = dayStart + hour * hourMs
+    if (at > epochMs) return { tariff, next: tariffAt(at), at }
+  }
+  // Past the last boundary of the UTC day: the next change is the first one tomorrow.
+  const at = dayStart + 24 * hourMs + boundaries[0] * hourMs
+  return { tariff, next: tariffAt(at), at }
+}
+
+/**
+ * The published schedule itself: 24 UTC hours labelled peak or off-peak, for
+ * the clock strip. Independent of the switchover date — before it the strip
+ * shows the schedule that is about to apply, which is exactly what a user
+ * planning the next hour needs to see.
+ * @returns {string[]} 24 tariff names, index = UTC hour.
+ */
+function tariffSchedule() {
+  const hours = []
+  for (let hour = 0; hour < 24; hour++) {
+    hours.push(PEAK_WINDOWS_UTC.some(([start, end]) => hour >= start && hour < end) ? 'peak' : 'offpeak')
+  }
+  return hours
+}
+
+/** Whether a model id has a published rate. */
+const isPriced = model => Object.prototype.hasOwnProperty.call(RATES, model)
+
+/**
+ * Cost of one token bucket set under one tariff.
+ * @param {{miss: number, hit: number, out: number}} tokens - billed token counts.
+ * @param {string} model - provider model id.
+ * @param {string} tariff - tariff key.
+ * @param {string} currency - `usd` or `cny`.
+ * @returns {number} cost in the currency's units, 0 for an unpriced model.
+ */
+function costOf(tokens, model, tariff, currency) {
+  const split = bucketCostOf(tokens, model, tariff, currency)
+  return split.miss + split.hit + split.out
+}
+
+/**
+ * The same cost, kept split by billed bucket — what the breakdown rows show.
+ * @param {{miss: number, hit: number, out: number}} tokens - billed token counts.
+ * @param {string} model - provider model id.
+ * @param {string} tariff - tariff key.
+ * @param {string} currency - `usd` or `cny`.
+ * @returns {{miss: number, hit: number, out: number}} cost per bucket, all zero for an unpriced model.
+ */
+function bucketCostOf(tokens, model, tariff, currency) {
+  const rate = RATES[model]?.[tariff]?.[currency]
+  if (rate === undefined) return { miss: 0, hit: 0, out: 0 }
+  return {
+    miss: (tokens.miss * rate.miss) / 1_000_000,
+    hit: (tokens.hit * rate.hit) / 1_000_000,
+    out: (tokens.out * rate.out) / 1_000_000,
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * The fold: session log -> billed token buckets.
+ * ------------------------------------------------------------------ */
+
+const zero = () => ({ miss: 0, hit: 0, out: 0, requests: 0 })
+
+const add = (target, sample, requests) => ({
+  miss: target.miss + sample.miss,
+  hit: target.hit + sample.hit,
+  out: target.out + sample.out,
+  requests: target.requests + requests,
+})
+
+/**
+ * The three billed buckets of one usage report. A `cacheWriteTokens` count
+ * (never reported by the DeepSeek adapter, possible from another) joins the
+ * cache-miss bucket: DeepSeek publishes no separate write price and bills a
+ * first-time prompt at the miss rate.
+ * @param {object} usage - harness `TokenUsage`.
+ * @returns {{miss: number, hit: number, out: number}} billed token counts.
+ */
+function billedTokens(usage) {
+  const number = value => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0)
+  return {
+    miss: number(usage.inputTokens) + number(usage.cacheWriteTokens),
+    hit: number(usage.cacheReadTokens),
+    out: number(usage.outputTokens),
+  }
+}
+
+/** Initial fold state for an empty log. */
+const init = () => ({ bills: {}, last: null, step: null, route: null, firstAt: null, lastAt: null })
+
+/** The usage a chunk or a finalized assistant message reports, if any. */
+const usageOf = (event) => {
+  if (event.type === 'assistant/chunk' && event.data.chunk.type === 'usage') return event.data.chunk.usage
+  if (event.type === 'assistant/message') return event.data.usage
+  return undefined
+}
+
+/** Bill key: one bucket per (tariff, model) pair. */
+const billKey = (tariff, model) => `${tariff}\u0000${model}`
+
+/**
+ * Fold one committed session event into the billing state.
+ *
+ * A step reports usage twice — an early `assistant/chunk` that survives a later
+ * request failure, then the finalized `assistant/message` — so a repeated
+ * report for the same (turn, step) REPLACES its predecessor rather than adding
+ * to it, including when the message's own model differs from the request
+ * header that preceded it.
+ * @param {object} state - state covering all prior events.
+ * @param {object} event - the next committed session event.
+ * @returns {object} next state, or the same reference when the event is not ours.
+ */
+function foldEvent(state, event) {
+  if (event.type === 'step/start') {
+    return { ...state, step: { turn: event.data.turn, step: event.data.step, time: event.time } }
+  }
+  if (event.type === 'request/context') {
+    const route = { model: event.data.model, provider: event.data.provider }
+    if (state.route !== null && state.route.model === route.model && state.route.provider === route.provider) return state
+    return { ...state, route }
+  }
+  if (event.type === 'request/header') {
+    const model = event.data.header.config?.model
+    if (typeof model !== 'string' || model === '') return state
+    const route = { model, provider: event.data.header.config?.provider ?? state.route?.provider ?? '' }
+    if (state.route !== null && state.route.model === route.model && state.route.provider === route.provider) return state
+    return { ...state, route }
+  }
+
+  const usage = usageOf(event)
+  if (usage === undefined) return state
+
+  const { turn, step } = event.data
+  // The message carries the model that actually answered; a chunk-only report
+  // (a step whose request later failed) falls back to the last routed model.
+  const source = event.type === 'assistant/message' ? event.data.message?.source : undefined
+  const model = source?.kind === 'model' && typeof source.model === 'string' && source.model !== ''
+    ? source.model
+    : state.route?.model
+  if (typeof model !== 'string' || model === '') return state
+
+  // Dispatch time decides the tariff, not the time the answer finished: a
+  // request sent one minute before the peak window opens is billed off-peak.
+  const dispatchedAt = state.step !== null && state.step.turn === turn && state.step.step === step
+    ? state.step.time
+    : event.time
+  const tariff = tariffAt(dispatchedAt)
+  const sample = billedTokens(usage)
+  const previous = state.last !== null && state.last.turn === turn && state.last.step === step ? state.last : null
+  if (previous !== null
+    && previous.key === billKey(tariff, model)
+    && previous.sample.miss === sample.miss
+    && previous.sample.hit === sample.hit
+    && previous.sample.out === sample.out) {
+    return state
+  }
+
+  const bills = { ...state.bills }
+  if (previous !== null) {
+    const held = bills[previous.key] ?? zero()
+    bills[previous.key] = add(held, { miss: -previous.sample.miss, hit: -previous.sample.hit, out: -previous.sample.out }, -1)
+  }
+  const key = billKey(tariff, model)
+  bills[key] = add(bills[key] ?? zero(), sample, 1)
+
+  return {
+    ...state,
+    bills,
+    last: { turn, step, key, sample },
+    firstAt: state.firstAt ?? dispatchedAt,
+    lastAt: dispatchedAt,
+  }
+}
+
+/** The two published rate cards; both are always computed. */
+const CURRENCIES = ['usd', 'cny']
+
+/**
+ * Price one currency's whole ledger.
+ * @param {object} bills - the fold's per-(tariff, model) token buckets.
+ * @param {string} currency - `usd` or `cny`.
+ * @returns {object} every money figure for that rate card.
+ */
+function priceIn(bills, currency) {
+  const byBucket = { miss: 0, hit: 0, out: 0 }
+  const byTariff = { flat: 0, offpeak: 0, peak: 0 }
+  const counterfactual = { flat: 0, offpeak: 0, peak: 0, noCache: 0 }
+  const models = {}
+  let cost = 0
+
+  for (const [key, tokens] of Object.entries(bills)) {
+    if (tokens.requests === 0 && tokens.miss === 0 && tokens.hit === 0 && tokens.out === 0) continue
+    const cut = key.indexOf('\u0000')
+    const tariff = key.slice(0, cut)
+    const model = key.slice(cut + 1)
+    const split = bucketCostOf(tokens, model, tariff, currency)
+    byBucket.miss += split.miss
+    byBucket.hit += split.hit
+    byBucket.out += split.out
+    const billed = split.miss + split.hit + split.out
+    models[model] = (models[model] ?? 0) + billed
+    cost += billed
+    byTariff[tariff] += billed
+    for (const alternative of TARIFFS) counterfactual[alternative] += costOf(tokens, model, alternative, currency)
+    // Every cache hit repriced as a miss: what the reuse was worth.
+    counterfactual.noCache += costOf({ miss: tokens.miss + tokens.hit, hit: 0, out: tokens.out }, model, tariff, currency)
+  }
+
+  return {
+    cost: round(cost),
+    byBucket: { miss: round(byBucket.miss), hit: round(byBucket.hit), out: round(byBucket.out) },
+    byTariff: { flat: round(byTariff.flat), offpeak: round(byTariff.offpeak), peak: round(byTariff.peak) },
+    counterfactual: {
+      flat: round(counterfactual.flat),
+      offpeak: round(counterfactual.offpeak),
+      peak: round(counterfactual.peak),
+      noCache: round(counterfactual.noCache),
+    },
+    modelCost: Object.fromEntries(Object.entries(models).map(([model, amount]) => [model, round(amount)])),
+  }
+}
+
+/**
+ * Project the billing state into the value the Web UI reads.
+ *
+ * Money is computed against BOTH published rate cards. DeepSeek bills an
+ * account in exactly one of them, and the account — not this plugin — decides
+ * which: the surface takes the side the account's own balance is denominated
+ * in. Nothing here guesses, and no figure is ever a converted one.
+ *
+ * `counterfactual` is what the same tokens would have cost billed entirely at
+ * one tariff — the honest way to show what the time-of-use switchover, or a
+ * cold cache, is worth on this session's actual traffic.
+ * @param {object} state - the folded billing state.
+ * @param {string} [preferred] - configured currency, or `auto` to let the surface decide.
+ * @returns {object} the wire value for the `costMeter` projection key.
+ */
+function view(state, preferred = 'auto') {
+  const models = new Map()
+  const totals = { miss: 0, hit: 0, out: 0 }
+  let requests = 0
+  let unpricedRequests = 0
+
+  for (const [key, tokens] of Object.entries(state.bills)) {
+    if (tokens.requests === 0 && tokens.miss === 0 && tokens.hit === 0 && tokens.out === 0) continue
+    const model = key.slice(key.indexOf('\u0000') + 1)
+    const priced = isPriced(model)
+    const held = models.get(model) ?? { model, priced, miss: 0, hit: 0, out: 0, requests: 0 }
+    models.set(model, {
+      ...held,
+      miss: held.miss + tokens.miss,
+      hit: held.hit + tokens.hit,
+      out: held.out + tokens.out,
+      requests: held.requests + tokens.requests,
+    })
+    totals.miss += tokens.miss
+    totals.hit += tokens.hit
+    totals.out += tokens.out
+    requests += tokens.requests
+    if (!priced) unpricedRequests += tokens.requests
+  }
+
+  return {
+    preferred,
+    requests,
+    tokens: totals,
+    money: Object.fromEntries(CURRENCIES.map(currency => [currency, priceIn(state.bills, currency)])),
+    models: [...models.values()]
+      .sort((left, right) =>
+        (right.miss + right.hit + right.out) - (left.miss + left.hit + left.out)
+        || left.model.localeCompare(right.model)),
+    unpricedRequests,
+    ...state.firstAt === null ? {} : { firstAt: state.firstAt },
+    ...state.lastAt === null ? {} : { lastAt: state.lastAt },
+  }
+}
+
+/** Money carries eight decimals: a single cheap request is worth ~1e-6 and must not round to nothing. */
+const round = amount => Math.round(amount * 1e8) / 1e8
+
+/**
+ * Structural check on the projection value, standing in for the Zod schema the
+ * registry's typed contract names — the value is produced by {@link view} in
+ * this same module, so this is a tripwire against a fold bug, not input parsing.
+ */
+const schema = {
+  /**
+   * Validate one projection value.
+   * @param {unknown} value - the `view` output.
+   * @returns {object} the same value when it holds.
+   */
+  parse(value) {
+    const fail = (reason) => { throw new Error(`dsh-meter: malformed costMeter projection (${reason})`) }
+    if (typeof value !== 'object' || value === null) fail('not an object')
+    const money = (amount, field) => {
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) fail(`${field} is not a non-negative number`)
+    }
+    if (!Array.isArray(value.models)) fail('models is not an array')
+    if (!Number.isInteger(value.requests) || value.requests < 0) fail('requests is not a count')
+    for (const currency of CURRENCIES) {
+      const priced = value.money?.[currency]
+      if (priced === undefined) fail(`money.${currency} is absent`)
+      money(priced.cost, `money.${currency}.cost`)
+      for (const key of ['miss', 'hit', 'out']) money(priced.byBucket?.[key], `money.${currency}.byBucket.${key}`)
+      for (const key of ['flat', 'offpeak', 'peak']) money(priced.byTariff?.[key], `money.${currency}.byTariff.${key}`)
+      for (const key of ['flat', 'offpeak', 'peak', 'noCache']) {
+        money(priced.counterfactual?.[key], `money.${currency}.counterfactual.${key}`)
+      }
+      for (const entry of value.models) {
+        if (entry.priced) money(priced.modelCost?.[entry.model], `money.${currency}.modelCost[${entry.model}]`)
+      }
+    }
+    return value
+  },
+}
+
+/* ------------------------------------------------------------------ *
+ * Display helpers — shared so the dock line, the card, and any future
+ * surface round money the same way.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Money at a fixed useful precision: four decimals under a unit (a whole
+ * session is often worth less than one cent), two above it, none above 1000.
+ * @param {number} amount - cost in currency units.
+ * @param {string} currency - `usd` or `cny`.
+ * @returns {string} display string with its symbol.
+ */
+function formatMoney(amount, currency) {
+  const symbol = CURRENCY_SYMBOL[currency] ?? ''
+  const magnitude = Math.abs(amount)
+  if (magnitude >= 1000) return `${symbol}${Math.round(amount)}`
+  if (magnitude >= 1) return `${symbol}${amount.toFixed(2)}`
+  if (magnitude === 0) return `${symbol}0`
+  if (magnitude < 0.0001) return `<${symbol}0.0001`
+  return `${symbol}${amount.toFixed(4)}`
+}
+
+/**
+ * Compact token count, matching the harness stats line: 517 / 12.2K / 1.2M.
+ * @param {number} count - token count.
+ * @returns {string} display string.
+ */
+function formatTokens(count) {
+  const scaled = value => (value >= 100 ? String(Math.round(value)) : String(Math.round(value * 10) / 10))
+  if (count < 1000) return String(Math.round(count))
+  if (count < 1_000_000) return `${scaled(count / 1000)}K`
+  return `${scaled(count / 1_000_000)}M`
+}
+
+/**
+ * Coarse countdown for the tariff clock: 45s, 12m, 3h20m, 2d.
+ * @param {number} ms - milliseconds remaining.
+ * @returns {string} display string.
+ */
+function formatCountdown(ms) {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return hours < 10 && minutes % 60 !== 0 ? `${hours}h${minutes % 60}m` : `${hours}h`
+  return `${Math.floor(hours / 24)}d`
+}
+
+var el = function (id) { return document.getElementById(id) }
+var strip = el('inst-strip')
+var HOUR = 3600000
+
+/* The static strip is drawn in UTC, which is what a reader without JavaScript
+ * gets. With JavaScript we redraw the same 24 published hours in the reader's
+ * own day, by asking each local hour which UTC hour it lands on.
+ *
+ * This reads tariffSchedule(), not tariffAt(): the strip is the published
+ * schedule, not a record of today. tariffAt() answers "what would a request
+ * sent at this instant be billed", which returns `flat` for any hour before
+ * the 2026-08-16 switchover — correct for billing, wrong for a clock face. */
+function drawStrip () {
+  var schedule = tariffSchedule()
+  var midnight = new Date()
+  midnight.setHours(0, 0, 0, 0)
+  var html = ''
+  for (var h = 0; h < 24; h++) {
+    var at = new Date(midnight.getTime() + h * HOUR)
+    var tariff = schedule[at.getUTCHours()]
+    var label = (h < 10 ? '0' : '') + h + ':00 — ' + (tariff === 'peak' ? 'peak' : 'off-peak')
+    html += '<span class="cell ' + tariff + '" title="' + label + '"></span>'
+  }
+  html += '<span class="now" id="inst-now"></span>'
+  strip.innerHTML = html
+}
+
+function render () {
+  var now = Date.now()
+  var clock = nextTariffChange(now)
+  var peak = clock.tariff === 'peak'
+
+  var tariff = el('inst-tariff')
+  tariff.textContent = peak ? 'peak' : 'off-peak'
+  tariff.className = 'tariff' + (peak ? ' peak' : '')
+
+  el('inst-flip').innerHTML = (clock.next === 'peak' ? 'peak in ' : 'off-peak in ')
+    + '<b>' + formatCountdown(clock.at - now) + '</b>'
+
+  var rate = RATES['deepseek-v4-pro'][clock.tariff]
+  var money = function (bucket) { return '$' + rate.usd[bucket] + ' / ¥' + rate.cny[bucket] }
+  el('rate-hit').textContent = money('hit')
+  el('rate-miss').textContent = money('miss')
+  el('rate-out').textContent = money('out')
+
+  var marker = el('inst-now')
+  if (marker) {
+    var midnight = new Date()
+    midnight.setHours(0, 0, 0, 0)
+    marker.style.left = ((now - midnight.getTime()) / (24 * HOUR) * 100).toFixed(3) + '%'
+  }
+}
+
+try {
+  var zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  if (zone) el('inst-tz').textContent = zone
+  drawStrip()
+  render()
+  setInterval(render, 1000)
+} catch (e) {
+  /* Leave the server-rendered UTC strip and the published windows in place —
+   * a broken upgrade must not take the readable version down with it. */
+}
+})();
+
+/* Theme: the control names its state, because two icons cannot express three.
+ * The semicolon above is load-bearing: without it the two IIFEs glue into
+ * `first()(second)`, which throws and leaves the toggle hidden forever. */
+(function () {
+  var button = document.getElementById('theme-toggle')
+  if (!button) return
+  var order = ['auto', 'light', 'dark']
+  var current = (function () {
+    try { return localStorage.getItem('theme') || 'auto' } catch (e) { return 'auto' }
+  })()
+  function paint () {
+    if (current === 'auto') delete document.documentElement.dataset.theme
+    else document.documentElement.dataset.theme = current
+    button.querySelector('.val').textContent = current
+    button.setAttribute('aria-label', 'Theme: ' + current + '. Click to change.')
+  }
+  button.hidden = false
+  paint()
+  button.addEventListener('click', function () {
+    current = order[(order.indexOf(current) + 1) % order.length]
+    try { current === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', current) } catch (e) {}
+    paint()
+  })
+})()
+</script>
+</body>
+</html>

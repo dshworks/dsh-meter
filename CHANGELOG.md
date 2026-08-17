@@ -20,6 +20,22 @@ The switchover happened, and the rate card was already right.
 - **A guard against under-billing.** New test: a request made now must
   never price at `flat`. It fails if anyone pushes `TIME_OF_USE_FROM`
   forward, which is the one bug in this file that costs a user real money.
+- **The cache discount is derived, not typed.** Both READMEs and the
+  card's own cold-cache hint claimed a hit bills at 1/50 of a miss — the
+  flat card's flash ratio, over-promising on every live row since the
+  switchover, on the one number a prompt-caching user acts on. It is 30x
+  now, and `CACHE_DISCOUNT` computes it from `RATES`, floored, with a test
+  that fails the day any row gets stingier than the surface claims.
+- **A site**, at <https://dsh.works/dsh-meter/>. `scripts/build-site.mjs`
+  inlines `lib/core.js` into `docs/index.html` the way `build-client.mjs`
+  inlines it into the bundle, so the page's tariff clock is the plugin's
+  tariff clock — running in the reader's own timezone, on the reader's own
+  clock — and its schedule strip and rate table are rendered from the same
+  exports. No price is typed into the HTML. `pnpm test` fails when the
+  page drifts from the card.
+- Three stale figures from the same cause: 47 tests (50), off-peak output
+  at 2.4x flat (2.3x, matching the fold right below it), and a rate card
+  "snapshot taken 2026-08-13" that has been re-checked twice since.
 
 ## 0.2.3 — 2026-08-16
 

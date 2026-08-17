@@ -1,0 +1,77 @@
+#!/usr/bin/env node
+/**
+ * Compose docs/index.html — the page GitHub Pages serves at
+ * https://dsh.works/dsh-meter/ — from site/index.template.html and lib/core.js.
+ *
+ * The page's centrepiece is a working tariff clock: it tells a visitor which
+ * DeepSeek tariff is running right now, in their own timezone, from the same
+ * rate card the plugin ships. That only stays honest if it IS the same file,
+ * so this inlines `lib/core.js` the way `build-client.mjs` does, and renders
+ * the parts a reader without JavaScript still needs — the schedule strip and
+ * the rate table — from that module's exports at build time.
+ *
+ * A price typed into HTML is a price that drifts. There are none here.
+ *
+ * Usage: `node scripts/build-site.mjs` writes the page;
+ *        `node scripts/build-site.mjs --check` fails when it is stale.
+ */
+import { readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { CACHE_DISCOUNT, CURRENCY_SYMBOL, RATES, tariffSchedule } from '../lib/core.js'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+/** Same strip as the plugin's card, in UTC: what a reader with JavaScript off sees. */
+const strip = tariffSchedule()
+  .map((tariff, hour) => `<span class="cell ${tariff}" title="${String(hour).padStart(2, '0')}:00 UTC — ${tariff === 'peak' ? 'peak' : 'off-peak'}"></span>`)
+  .join('')
+
+/** Both platforms' published rates, side by side, straight out of the card. */
+const rateRows = Object.entries(RATES)
+  .flatMap(([model, byTariff]) => ['offpeak', 'peak'].map((tariff) => {
+    const short = model.replace('deepseek-', '')
+    const cell = (bucket) => ['usd', 'cny']
+      .map((currency) => `${CURRENCY_SYMBOL[currency]}${byTariff[tariff][currency][bucket]}`)
+      .join(' / ')
+    return `<tr${tariff === 'peak' ? ' class="peak"' : ''}>`
+      + `<th scope="row">${short} <span class="t">${tariff === 'peak' ? 'peak' : 'off-peak'}</span></th>`
+      + `<td>${cell('hit')}</td><td>${cell('miss')}</td><td>${cell('out')}</td></tr>`
+  }))
+  .join('\n')
+
+/** Strip ES module syntax — the page has no module graph, same as the client bundle. */
+const core = readFileSync(join(root, 'lib/core.js'), 'utf8')
+  .replace(/^export (const|function|let) /gm, '$1 ')
+  .replace(/^export /gm, '')
+  .trimEnd()
+
+const page = readFileSync(join(root, 'site/index.template.html'), 'utf8')
+  .replace('/*{{CORE}}*/', () => core)
+  .replace('<!--{{STRIP}}-->', () => strip)
+  .replace('<!--{{RATES}}-->', () => rateRows)
+  .replace(/\{\{CACHE_DISCOUNT\}\}/g, String(CACHE_DISCOUNT))
+
+for (const token of ['{{CORE}}', '{{STRIP}}', '{{RATES}}', '{{CACHE_DISCOUNT}}']) {
+  if (page.includes(token)) throw new Error(`build-site: ${token} survived substitution`)
+}
+
+const target = join(root, 'docs/index.html')
+if (process.argv.includes('--check')) {
+  const current = (() => {
+    try {
+      return readFileSync(target, 'utf8')
+    } catch {
+      return ''
+    }
+  })()
+  if (current !== page) {
+    process.stderr.write('build-site: docs/index.html is stale — run `node scripts/build-site.mjs`\n')
+    process.exit(1)
+  }
+  process.stdout.write('build-site: docs/index.html is in sync\n')
+} else {
+  writeFileSync(target, page)
+  process.stdout.write(`build-site: wrote docs/index.html (${page.length} bytes)\n`)
+}

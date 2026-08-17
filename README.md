@@ -72,7 +72,7 @@ session on DeepSeek-V4-Pro — not a mock:
 
 | Claim | How it was checked |
 |---|---|
-| Loads in a stock web profile | `dsh --profile web --dump-config` lists it; `/plugins/dsh-meter/client.js` serves 200 |
+| Loads in a stock web profile | `dsh --profile web --dump-config` lists it; `/plugins/@dshworks/dsh-meter/client.js` serves 200 |
 | The readout is correct | 22.2K cache-miss input on v4-pro at the flat rate = ¥0.0665; the line and the card agree with the harness's own token counts |
 | Survives a restart | Server restarted, session reopened cold — the projection replays from the durable log at the same figure |
 | Both themes, both tariff states | Light and dark, flat and peak, captured above |

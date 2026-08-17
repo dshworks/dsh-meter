@@ -62,7 +62,7 @@ dsh --profile web
 
 | 结论 | 怎么验的 |
 |---|---|
-| 能在标准 web profile 里加载 | `dsh --profile web --dump-config` 能列出；`/plugins/dsh-meter/client.js` 返回 200 |
+| 能在标准 web profile 里加载 | `dsh --profile web --dump-config` 能列出；`/plugins/@dshworks/dsh-meter/client.js` 返回 200 |
 | 读数正确 | v4-pro 统一价下 22.2K 未命中输入 = ¥0.0665；那一行与卡片同 dsh 自己的 token 统计一致 |
 | 重启后仍在 | 重启服务、冷启动重开会话，投影从持久日志重放出同一个数 |
 | 两种主题、两种档位 | 亮色/暗色、统一价/高峰，见上图 |

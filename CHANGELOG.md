@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3 — 2026-08-16
+
+- **Fix: the Web UI half failed to load when installed from npm.** The
+  browser bundle still registered itself as `dsh-meter`, but the harness
+  keys client modules by package name and serves the bundle at
+  `/plugins/@dshworks/dsh-meter/client.js` — the loader rejected it
+  (`loaded without registering "@dshworks/dsh-meter"`) and the web UI
+  showed "Failed to load plugins" for the whole profile. The bundle id now
+  comes from `package.json`, and a test pins the two together.
+
 ## 0.2.2 — 2026-08-15
 
 - Restore the `engines` floor (`node >=20`) that the balance reader's

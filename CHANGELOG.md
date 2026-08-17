@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+The switchover happened, and the rate card was already right.
+
+- **Re-verified against upstream and against a bill.** DeepSeek's
+  time-of-use card took effect at 16:00 UTC on 2026-08-16 and the pricing
+  page now publishes only the off-peak and peak rows, in both locales.
+  Every figure in `RATES` already matched, in both currencies, so no rate
+  changed here. One live check confirmed the billing system flipped too,
+  not just the page: 188,542 cache-miss tokens on pro, off-peak, settled
+  at ¥0.84 — ¥4.46/1M against the published 4.5, where the flat card
+  would have made it 3.0.
+- **`flat` is documented as retired, not current.** Both READMEs led with
+  the flat row; it now sits below the live card, folded, labelled as what
+  the ledger reprices history under. The rate itself stays in `RATES`
+  because a session logged before the switchover must still cost what it
+  actually cost.
+- **A guard against under-billing.** New test: a request made now must
+  never price at `flat`. It fails if anyone pushes `TIME_OF_USE_FROM`
+  forward, which is the one bug in this file that costs a user real money.
+
 ## 0.2.3 — 2026-08-16
 
 - **Fix: the Web UI half failed to load when installed from npm.** The

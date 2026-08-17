@@ -75,7 +75,7 @@ session on DeepSeek-V4-Pro — not a mock:
 | Loads in a stock web profile | `dsh --profile web --dump-config` lists it; `/plugins/@dshworks/dsh-meter/client.js` serves 200 |
 | The readout is correct | 22.2K cache-miss input on v4-pro at the flat rate = ¥0.0665; the line and the card agree with the harness's own token counts |
 | Survives a restart | Server restarted, session reopened cold — the projection replays from the durable log at the same figure |
-| Both themes, both tariff states | Light and dark, flat and peak, captured above |
+| Both themes, both tariff states | Light and dark, flat and peak, captured above — this predates the 08-16 switchover, so the flat readout is one a new session no longer reaches |
 | Currency detection | A live account returns `{"currency":"cny", ...}` and the whole surface switches to ¥ with no configuration |
 | 47 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the balance reader, and the generated-bundle sync check |
 
@@ -104,11 +104,9 @@ Carried verbatim in [`lib/core.js`](lib/core.js), per 1M tokens.
 
 | | cache hit | cache miss | output |
 |---|---|---|---|
-| **v4-flash** flat *(until Aug 16 16:00 UTC)* | $0.0028 / ¥0.02 | $0.14 / ¥1 | $0.28 / ¥2 |
-| v4-flash off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
+| **v4-flash** off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
 | v4-flash peak | $0.014 / ¥0.10 | $0.44 / ¥3 | $1.32 / ¥9 |
-| **v4-pro** flat *(until Aug 16 16:00 UTC)* | $0.003625 / ¥0.025 | $0.435 / ¥3 | $0.87 / ¥6 |
-| v4-pro off-peak | $0.022 / ¥0.15 | $0.66 / ¥4.5 | $1.98 / ¥13.5 |
+| **v4-pro** off-peak | $0.022 / ¥0.15 | $0.66 / ¥4.5 | $1.98 / ¥13.5 |
 | v4-pro peak | $0.044 / ¥0.30 | $1.32 / ¥9 | $3.96 / ¥27 |
 
 Peak is **01:00–04:00 and 06:00–10:00 UTC** (09:00–12:00 and 14:00–18:00
@@ -116,8 +114,27 @@ Beijing). Every other hour is off-peak, including the two-hour gap
 between the windows. Off-peak is exactly half of peak — and still above
 the flat rate it replaced, by about 2.4x on output.
 
-Source: <https://api-docs.deepseek.com/quick_start/pricing>, fetched
-2026-08-13.
+<details>
+<summary>The retired flat card, kept to reprice history</summary>
+
+Billed at every hour until **2026-08-16 16:00 UTC**. Upstream no longer
+publishes it; the meter keeps it because a session logged before the
+switchover must still cost what it actually cost.
+
+| | cache hit | cache miss | output |
+|---|---|---|---|
+| **v4-flash** flat | $0.0028 / ¥0.02 | $0.14 / ¥1 | $0.28 / ¥2 |
+| **v4-pro** flat | $0.003625 / ¥0.025 | $0.435 / ¥3 | $0.87 / ¥6 |
+
+Against it, pro rose 6x/12x on cached input, 1.5x/3x on cache-miss input
+and 2.3x/4.6x on output (off-peak/peak). The steepest rise is on the
+cheapest token, which is the one an agent sends most of.
+
+</details>
+
+Source: <https://api-docs.deepseek.com/quick_start/pricing>, re-checked
+2026-08-17 — and against a real bill: 188,542 cache-miss tokens on pro,
+off-peak, settled at ¥0.84, i.e. ¥4.46/1M against the published 4.5.
 
 ## How the money is counted
 

@@ -4,7 +4,10 @@
 > under DeepSeek's time-of-use pricing: one line in the composer dock with
 > the session total, the tariff in force, and the countdown to the next
 > change, plus a hover card with a local-time tariff clock, the
-> cache/input/output split, and the account balance.
+> cache/input/output split, and the account balance. Optional saving mode
+> (`savingMode: true`) adds one system-prompt section that tells the model
+> which tariff it is standing in and asks for economical behavior during
+> peak windows.
 
 DeepSeek moved to time-of-use billing at 16:00 UTC on 2026-08-16: peak
 windows 01:00-04:00 and 06:00-10:00 UTC, off-peak at half the peak rate.
@@ -34,7 +37,7 @@ clock (the visitor's own timezone, the live rate card) generated from
 
 - [lib/core.js](lib/core.js): the published rate card, the tariff clock, and the pure session-log fold — the single source of both halves
 - [lib/balance.js](lib/balance.js): the TTL-cached `GET /user/balance` reader and its error taxonomy
-- [lib/index.js](lib/index.js): host plugin — registers the `costMeter` session projection and the `/dsh-meter/balance` route
+- [lib/index.js](lib/index.js): host plugin — registers the `costMeter` session projection, the saving-mode system-prompt section, and the `/dsh-meter/balance` route
 - [src/ui.js](src/ui.js): browser surface — the composer-dock line, the hover card, and the locale dictionaries
 - [scripts/build-client.mjs](scripts/build-client.mjs): inlines core + ui into `lib/client.js`, the bundle dsh serves; `--check` fails when stale
 - [scripts/build-site.mjs](scripts/build-site.mjs): inlines core into `docs/index.html`, the GitHub Pages site; renders its schedule strip and rate table from the same exports
@@ -43,4 +46,5 @@ clock (the visitor's own timezone, the live rate card) generated from
 
 - [tests/ledger.spec.mjs](tests/ledger.spec.mjs): the fold's contract, including chunk-then-message replacement and boundary-crossing sessions
 - [tests/tariff.spec.mjs](tests/tariff.spec.mjs): the rate card and the tariff clock
+- [tests/prompt.spec.mjs](tests/prompt.spec.mjs): the saving-mode nudge — when it speaks, what it says, and why it stays silent
 - [tests/balance.spec.mjs](tests/balance.spec.mjs): the balance reader's caching, coalescing, and failure modes

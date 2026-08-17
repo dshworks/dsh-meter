@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 — 2026-08-17
+
+The meter gets a voice — optionally.
+
+- **Saving mode (`savingMode: true`).** Off by default, the meter
+  contributes one system-prompt section, `meter:tariff`, evaluated at
+  every assembly: inside a peak window it tells the model which tariff
+  the next request will be dispatched under, names the peak hours, and
+  asks for economical behavior; outside the windows it renders
+  `savingOffPeakPrompt`, empty by default, so silence costs zero prompt
+  tokens. The tariff comes from the same clock the billing fold uses, so
+  the nudge and the bill cannot disagree. This is the plugin's first
+  model-visible contribution; CONTRIBUTING.md's "keep the model surface
+  empty" rule now reads "empty by default".
+- **The nudge is cache-safe by design.** The section text is
+  byte-identical inside a tariff window (a countdown would roll the
+  session's prompt-prefix cache every minute — the most expensive way to
+  save money a cost plugin can think of), so it flips only at the four
+  daily tariff boundaries. Both READMEs say so.
+- **Both texts are configurable** (`savingPeakPrompt`,
+  `savingOffPeakPrompt`), validated with the rest of the config; a custom
+  peak nudge replaces the built-in one verbatim.
+- Six new tests (`tests/prompt.spec.mjs`) pin the nudge: silence when
+  off, the built-in text inside both peak windows, verbatim custom text,
+  silence off-peak by default, silence under the retired flat tariff,
+  and stability inside a window. 56 tests, CI green.
+
 ## 0.2.4 — 2026-08-17
 
 The switchover happened, and the rate card was already right.

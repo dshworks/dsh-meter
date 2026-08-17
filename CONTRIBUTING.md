@@ -30,9 +30,12 @@ pnpm test
   arithmetic, so there is no excuse not to.
 - UI changes need a screenshot from a real dsh session, not a mock. If
   the visible readout changes, the README's images change with it.
-- Keep the model surface empty. `dsh-meter` adds no tool and no prompt
-  section; a change that puts cost in the agent's context window is a
-  different plugin.
+- Keep the model surface empty **by default**. `dsh-meter` adds no tool
+  and no prompt section unless `savingMode: true` turns on its one
+  system-prompt contribution; a change that puts cost in the agent's
+  context window any other way is a different plugin. Saving-mode text
+  changes belong in `lib/core.js` (`tariffPrompt` and its default), not
+  in a second copy.
 
 ## Translations
 

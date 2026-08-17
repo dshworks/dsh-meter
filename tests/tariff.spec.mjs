@@ -69,6 +69,15 @@ describe('tariffAt', () => {
     expect(TIME_OF_USE_FROM).toBe(utc(2026, 8, 16, 16))
     expect(tariffAt(TIME_OF_USE_FROM)).toBe('offpeak')
   })
+
+  // The switchover is behind us, so `flat` is history-only: it must never
+  // price a request being made now. This is the guard against someone
+  // pushing TIME_OF_USE_FROM forward and quietly under-billing the live
+  // card, which is the one bug here that costs a user real money.
+  it('never bills a request made now at the retired flat rate', () => {
+    expect(Date.now()).toBeGreaterThan(TIME_OF_USE_FROM)
+    expect(tariffAt(Date.now())).not.toBe('flat')
+  })
 })
 
 describe('nextTariffChange', () => {

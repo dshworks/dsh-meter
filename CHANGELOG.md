@@ -39,6 +39,33 @@ The rate card stops being a private fact.
   the feed, the npm route (`@dshworks/dsh-meter/core`, which imports
   nothing), and why the aggregators are wrong.
 
+- **The Chinese page's schedule is checked too, and against the English
+  one.** `verify-pricing` read only the English footnote's UTC sentence,
+  so a change to the mainland windows alone would have been invisible —
+  and DeepSeek already publishes two independent rate cards for the two
+  platforms, which makes two independent schedules equally possible. It
+  now parses the Chinese footnote's Beijing hours, converts at UTC+8,
+  compares both against the card, and compares them against each other.
+  If the two pages ever disagree, the card needs one schedule per
+  currency, which is a design change and not a number edit.
+- **The alarm's parsers are unit-tested** (`tests/verify-pricing.spec.mjs`,
+  10 tests, no network — only `main()` fetches, and it runs only when the
+  file is invoked directly). A parser that quietly reads the wrong row
+  still exits 0, so the happy case proves nothing. Covers both locales'
+  table shapes, the rows that look like price rows and are not, and the
+  Beijing conversion including windows that wrap across the UTC day.
+- **The feed says how to read "now", because that is the one way to
+  misread it.** New `timeOfUse.anchor` (Asia/Shanghai, UTC+8, no DST
+  since 1991, plus the Beijing windows as display strings) and
+  `timeOfUse.readingNow`. A test now also asserts the file carries **no**
+  `now`/`asOf`/`currentTariff` field: it publishes the schedule, never
+  the answer, which is what lets a cached or vendored copy stay correct.
+  Both READMEs gained a zero-install `curl | jq` recipe and the two
+  silent ways to get it wrong — local-hour indexing, and jq's `gmtime`
+  hour being `.[3]` where `.[2]` is the day of the month and also a valid
+  index into a 24-hour array. Caught live: at 09:59 UTC `.[2]` reported
+  `offpeak` while the tariff was `peak`.
+
 ## 0.2.4 — 2026-08-17
 
 The switchover happened, and the rate card was already right.

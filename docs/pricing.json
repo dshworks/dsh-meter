@@ -56,7 +56,18 @@
       "offpeak"
     ],
     "offPeakIsHalfOfPeak": true,
-    "note": "A request is billed at the tariff in force when it was DISPATCHED, not when the answer completed. A long response that starts off-peak and finishes in a peak window bills off-peak."
+    "note": "A request is billed at the tariff in force when it was DISPATCHED, not when the answer completed. A long response that starts off-peak and finishes in a peak window bills off-peak.",
+    "anchor": {
+      "timezone": "Asia/Shanghai",
+      "utcOffsetHours": 8,
+      "observesDaylightSaving": false,
+      "peakWindowsBeijing": [
+        "09:00-12:00",
+        "14:00-18:00"
+      ],
+      "note": "China has not observed daylight saving since 1991, so the UTC hours above are stable year-round and need no timezone database. peakWindowsBeijing is for display only — scheduleUtc is the machine-readable form."
+    },
+    "readingNow": "tariff = scheduleUtc[new Date(dispatchedAtMs).getUTCHours()]. Index with UTC hours, NEVER local hours: scheduleUtc is not rotated into the reader's timezone. This file deliberately carries no current-time field, so a cached or vendored copy can never be stale about which tariff is running."
   },
   "buckets": {
     "hit": {

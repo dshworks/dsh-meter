@@ -48,6 +48,19 @@ const live = TARIFFS.filter(tariff => tariff !== 'flat')
 const OUTPUT_MULTIPLE = Math.min(...Object.values(RATES).flatMap(byTariff =>
   live.flatMap(tariff => Object.values(byTariff[tariff]).map(rate => rate.out / rate.miss))))
 
+/**
+ * Beijing is UTC+8 and China has not observed daylight saving since 1991, so
+ * the Beijing-anchored policy maps to fixed UTC hours all year. That is the
+ * only reason a schedule of UTC hours is a safe representation at all.
+ */
+const BEIJING_OFFSET_HOURS = 8
+
+/** The same windows as DeepSeek's Chinese page states them — strings, never an indexable schedule. */
+const beijingWindows = PEAK_WINDOWS_UTC.map(([start, end]) => {
+  const local = hour => String((hour + BEIJING_OFFSET_HOURS) % 24).padStart(2, '0')
+  return `${local(start)}:00-${local(end)}:00`
+})
+
 /** One model's rates, keyed tariff -> currency -> bucket, straight off the card. */
 const ratesOf = (byTariff, tariffs) => Object.fromEntries(tariffs.map(tariff => [
   tariff,
@@ -76,6 +89,19 @@ const feed = {
     scheduleUtc: tariffSchedule(),
     offPeakIsHalfOfPeak: true,
     note: 'A request is billed at the tariff in force when it was DISPATCHED, not when the answer completed. A long response that starts off-peak and finishes in a peak window bills off-peak.',
+
+    /* The policy is written in Beijing time on DeepSeek's Chinese page and in
+     * UTC on the English one. Both are published and both are checked. */
+    anchor: {
+      timezone: 'Asia/Shanghai',
+      utcOffsetHours: BEIJING_OFFSET_HOURS,
+      observesDaylightSaving: false,
+      peakWindowsBeijing: beijingWindows,
+      note: 'China has not observed daylight saving since 1991, so the UTC hours above are stable year-round and need no timezone database. peakWindowsBeijing is for display only — scheduleUtc is the machine-readable form.',
+    },
+
+    /* The one way to misread this file. */
+    readingNow: 'tariff = scheduleUtc[new Date(dispatchedAtMs).getUTCHours()]. Index with UTC hours, NEVER local hours: scheduleUtc is not rotated into the reader\'s timezone. This file deliberately carries no current-time field, so a cached or vendored copy can never be stale about which tariff is running.',
   },
 
   buckets: {

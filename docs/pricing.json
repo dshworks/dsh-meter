@@ -1,0 +1,169 @@
+{
+  "schema": "dsh-meter/pricing@1",
+  "generator": "@dshworks/dsh-meter@0.2.4",
+  "homepage": "https://dsh.works/dsh-meter/",
+  "source": {
+    "usd": "https://api-docs.deepseek.com/quick_start/pricing",
+    "cny": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+  },
+  "unit": "currency per 1M tokens",
+  "currencies": {
+    "usd": {
+      "symbol": "$"
+    },
+    "cny": {
+      "symbol": "¥"
+    }
+  },
+  "currencyNote": "usd is the international platform table and cny the mainland one. They are separate published prices, not an exchange-rate conversion of each other. GET /user/balance reports which one an account bills in.",
+  "timeOfUse": {
+    "since": "2026-08-16T16:00:00.000Z",
+    "sinceEpochMs": 1786896000000,
+    "peakWindowsUtc": [
+      {
+        "startHourUtc": 1,
+        "endHourUtc": 4
+      },
+      {
+        "startHourUtc": 6,
+        "endHourUtc": 10
+      }
+    ],
+    "scheduleUtc": [
+      "offpeak",
+      "peak",
+      "peak",
+      "peak",
+      "offpeak",
+      "offpeak",
+      "peak",
+      "peak",
+      "peak",
+      "peak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak",
+      "offpeak"
+    ],
+    "offPeakIsHalfOfPeak": true,
+    "note": "A request is billed at the tariff in force when it was DISPATCHED, not when the answer completed. A long response that starts off-peak and finishes in a peak window bills off-peak."
+  },
+  "buckets": {
+    "hit": {
+      "billsAs": "input, cache hit",
+      "from": "usage.prompt_cache_hit_tokens",
+      "note": "A hit costs about 1/30 of a miss on the live card — the single largest lever on a session bill."
+    },
+    "miss": {
+      "billsAs": "input, cache miss",
+      "from": "usage.prompt_tokens - usage.prompt_cache_hit_tokens",
+      "note": "prompt_tokens is the TOTAL input and already contains the hits. Billing the two side by side double-counts every cached token. DeepSeek publishes no separate cache-write price: a first-time prompt bills here."
+    },
+    "out": {
+      "billsAs": "output",
+      "from": "usage.completion_tokens",
+      "note": "Reasoning tokens are output tokens and are already inside completion_tokens. Output is the most expensive bucket, 3x a cache miss."
+    }
+  },
+  "formula": "cost = SUM over buckets of tokens[bucket] * rates[model][tariffAt(dispatchedAt)][currency][bucket] / 1e6",
+  "models": {
+    "deepseek-v4-flash": {
+      "rates": {
+        "offpeak": {
+          "usd": {
+            "hit": 0.007,
+            "miss": 0.22,
+            "out": 0.66
+          },
+          "cny": {
+            "hit": 0.05,
+            "miss": 1.5,
+            "out": 4.5
+          }
+        },
+        "peak": {
+          "usd": {
+            "hit": 0.014,
+            "miss": 0.44,
+            "out": 1.32
+          },
+          "cny": {
+            "hit": 0.1,
+            "miss": 3,
+            "out": 9
+          }
+        }
+      },
+      "retired": {
+        "flat": {
+          "usd": {
+            "hit": 0.0028,
+            "miss": 0.14,
+            "out": 0.28
+          },
+          "cny": {
+            "hit": 0.02,
+            "miss": 1,
+            "out": 2
+          },
+          "until": "2026-08-16T16:00:00.000Z",
+          "note": "The single all-day rate DeepSeek billed before time-of-use. Retired — several third-party price feeds still publish it as current."
+        }
+      }
+    },
+    "deepseek-v4-pro": {
+      "rates": {
+        "offpeak": {
+          "usd": {
+            "hit": 0.022,
+            "miss": 0.66,
+            "out": 1.98
+          },
+          "cny": {
+            "hit": 0.15,
+            "miss": 4.5,
+            "out": 13.5
+          }
+        },
+        "peak": {
+          "usd": {
+            "hit": 0.044,
+            "miss": 1.32,
+            "out": 3.96
+          },
+          "cny": {
+            "hit": 0.3,
+            "miss": 9,
+            "out": 27
+          }
+        }
+      },
+      "retired": {
+        "flat": {
+          "usd": {
+            "hit": 0.003625,
+            "miss": 0.435,
+            "out": 0.87
+          },
+          "cny": {
+            "hit": 0.025,
+            "miss": 3,
+            "out": 6
+          },
+          "until": "2026-08-16T16:00:00.000Z",
+          "note": "The single all-day rate DeepSeek billed before time-of-use. Retired — several third-party price feeds still publish it as current."
+        }
+      }
+    }
+  }
+}

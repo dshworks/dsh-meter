@@ -1,0 +1,55 @@
+# Ask DeepSeek what it charges, every day.
+#
+# `lib/core.js` carries the rate card verbatim from the published tables, and
+# a card is only verbatim until the day it isn't. The last change landed with
+# no announcement in any channel we watch; third-party price feeds are still
+# publishing the retired numbers. This is the alarm.
+name: pricing-watch
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - id: verify
+        run: |
+          set +e
+          node scripts/verify-pricing.mjs > report.md 2> error.txt
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.md error.txt
+          set -e
+
+      # A page we cannot read is not a pass. It is a quieter kind of drift.
+      - if: steps.verify.outputs.status == '2'
+        run: |
+          { echo "The pricing pages could not be read or parsed:"; echo; echo '```'; cat error.txt; echo '```'; } > report.md
+
+      - if: steps.verify.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: DeepSeek pricing drift
+        run: |
+          # Create the label first: `gh issue list --label` errors on a label
+          # that does not exist yet, which would swallow the very first alert.
+          gh label create pricing-drift --color B60205 --force \
+            --description "The shipped rate card disagrees with DeepSeek"
+          open=$(gh issue list --label pricing-drift --state open --limit 1 --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file report.md
+          else
+            gh issue create --title "$TITLE" --label pricing-drift --body-file report.md
+          fi

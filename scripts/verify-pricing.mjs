@@ -27,7 +27,7 @@ import { pathToFileURL } from 'node:url'
 
 import { PEAK_WINDOWS_UTC, RATES } from '../lib/core.js'
 
-const PAGES = {
+export const PAGES = {
   usd: 'https://api-docs.deepseek.com/quick_start/pricing',
   cny: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing',
 }
@@ -158,7 +158,7 @@ export function scrapeWindowsCn(html) {
   return pairWindows(utc, `"${sentence[1]}" (Beijing, converted at UTC+${BEIJING_OFFSET_HOURS})`)
 }
 
-const fetchPage = async (url) => {
+export const fetchPage = async (url) => {
   const response = await fetch(url, { headers: { accept: 'text/html' }, redirect: 'follow' })
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   return await response.text()

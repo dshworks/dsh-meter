@@ -1,9 +1,15 @@
-# Ask DeepSeek what it charges, every day.
+# Ask DeepSeek what it charges, every day — and write the answer down.
 #
-# `lib/core.js` carries the rate card verbatim from the published tables, and
-# a card is only verbatim until the day it isn't. The last change landed with
-# no announcement in any channel we watch; third-party price feeds are still
-# publishing the retired numbers. This is the alarm.
+# `lib/core.js` carries the rate card verbatim from the published tables, and a
+# card is only verbatim until the day it isn't. The last change landed with no
+# announcement in any channel we watch, and third-party feeds published the
+# retired numbers for days afterwards. DeepSeek's own integration guide ships a
+# cache-read rate that is a 10x decimal slip. Nobody keeps a hand-typed rate
+# card correct, so the machine types it and a human reviews the diff.
+#
+# Drift opens a PR, never a merge. The structural invariants a test can check
+# (off-peak is half of peak, out > miss > hit) are satisfied by plenty of wrong
+# cards; the number that decides what a user pays gets a human's eyes.
 name: pricing-watch
 
 on:
@@ -12,18 +18,23 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   issues: write
+
+env:
+  BRANCH: pricing/auto-sync
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - run: npm install --no-audit --no-fund
 
       - id: verify
         run: |
@@ -33,23 +44,70 @@ jobs:
           cat report.md error.txt
           set -e
 
-      # A page we cannot read is not a pass. It is a quieter kind of drift.
-      - if: steps.verify.outputs.status == '2'
+      # Drift: let the machine write the numbers. apply-pricing re-runs the
+      # verifier against its own output and reverts if that read disagrees, so
+      # a splice that lands a value in the wrong slot never reaches a branch.
+      - id: apply
+        if: steps.verify.outputs.status == '1'
         run: |
-          { echo "The pricing pages could not be read or parsed:"; echo; echo '```'; cat error.txt; echo '```'; } > report.md
+          set +e
+          node scripts/apply-pricing.mjs > applied.txt 2>&1
+          applied=$?
+          cat applied.txt
+          if [ "$applied" -ne 0 ]; then echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          npm run build >> applied.txt 2>&1 || { echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+          set -e
 
-      - if: steps.verify.outputs.status != '0'
+      - name: Open or update the sync PR
+        if: steps.apply.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: DeepSeek pricing drift
         run: |
+          git config user.name "pricing-watch"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add lib/core.js lib/client.js docs/index.html docs/pricing.json
+          git diff --cached --quiet && { echo "verifier saw drift but nothing changed on disk — bailing to the issue path"; exit 1; }
+          {
+            echo "DeepSeek's published pricing changed. The card, the bundle, the site and the feed"
+            echo "were rewritten from the source by \`scripts/apply-pricing.mjs\`, which re-read both"
+            echo "pages against its own output before committing."
+            echo
+            echo "**Review the numbers against the pages before merging.** The invariants CI checks"
+            echo "are structural and a wrong-but-plausible parse satisfies all of them."
+            echo
+            echo '```'
+            cat report.md
+            echo '```'
+          } > pr-body.md
+          git commit -q -m "chore: sync the rate card with DeepSeek's published tables" -m "Written by scripts/apply-pricing.mjs from api-docs.deepseek.com, both locales, and re-verified against the source before commit. Review the diff — no test can tell a plausible wrong price from a right one."
+          git push -f origin "$BRANCH"
+          gh pr view "$BRANCH" --json number >/dev/null 2>&1 \
+            && gh pr comment "$BRANCH" --body-file pr-body.md \
+            || gh pr create --head "$BRANCH" --title "Sync the rate card with DeepSeek's published tables" --body-file pr-body.md
+
+      # A page we cannot read, or cannot rewrite from, is not a pass. It is a
+      # quieter kind of drift, and it needs a human rather than a diff.
+      - if: steps.verify.outputs.status == '2' || steps.apply.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: DeepSeek pricing needs a human
+        run: |
+          {
+            echo "The daily pricing check could not finish on its own."
+            echo
+            echo '```'
+            cat report.md error.txt applied.txt 2>/dev/null
+            echo '```'
+          } > issue.md
           # Create the label first: `gh issue list --label` errors on a label
           # that does not exist yet, which would swallow the very first alert.
           gh label create pricing-drift --color B60205 --force \
             --description "The shipped rate card disagrees with DeepSeek"
           open=$(gh issue list --label pricing-drift --state open --limit 1 --json number --jq '.[0].number')
           if [ -n "$open" ]; then
-            gh issue comment "$open" --body-file report.md
+            gh issue comment "$open" --body-file issue.md
           else
-            gh issue create --title "$TITLE" --label pricing-drift --body-file report.md
+            gh issue create --title "$TITLE" --label pricing-drift --body-file issue.md
           fi

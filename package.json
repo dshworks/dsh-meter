@@ -32,7 +32,8 @@
   "scripts": {
     "build": "node scripts/build-client.mjs && node scripts/build-site.mjs && node scripts/build-pricing.mjs",
     "test": "node scripts/build-client.mjs --check && node scripts/build-site.mjs --check && node scripts/build-pricing.mjs --check && vitest run",
-    "verify:pricing": "node scripts/verify-pricing.mjs"
+    "verify:pricing": "node scripts/verify-pricing.mjs",
+    "sync:pricing": "node scripts/apply-pricing.mjs && npm run build"
   },
   "dsh": {
     "bundle": {

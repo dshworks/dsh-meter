@@ -6,6 +6,11 @@
 > change, plus a hover card with a local-time tariff clock, the
 > cache/input/output split, and the account balance.
 
+The rate card is written by machine and reviewed by human: a daily job scrapes
+both of DeepSeek's pricing pages, rewrites `lib/core.js` from them, regenerates
+every artifact, and opens a PR. It never merges one — the invariants CI can
+check are structural, and a wrong-but-plausible parse satisfies all of them.
+
 DeepSeek moved to time-of-use billing at 16:00 UTC on 2026-08-16: peak
 windows 01:00-04:00 and 06:00-10:00 UTC, off-peak at half the peak rate.
 Each request is priced at the tariff in force when it was **dispatched**,
@@ -49,6 +54,7 @@ DeepSeek's own pages and opens an issue on any disagreement.
 - [scripts/build-site.mjs](scripts/build-site.mjs): inlines core into `docs/index.html`, the GitHub Pages site; renders its schedule strip and rate table from the same exports
 - [scripts/build-pricing.mjs](scripts/build-pricing.mjs): renders the card into `docs/pricing.json`, the published feed; `--check` fails when stale
 - [scripts/verify-pricing.mjs](scripts/verify-pricing.mjs): scrapes DeepSeek's two pricing pages and diffs them against the card — the daily drift alarm, run outside the test suite
+- [scripts/apply-pricing.mjs](scripts/apply-pricing.mjs): writes the scraped rates back into `lib/core.js`, then re-verifies its own output and reverts if that second read disagrees — the card is generated, not typed
 
 ## Optional
 

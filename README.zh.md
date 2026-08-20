@@ -162,9 +162,26 @@ curl -s https://dsh.works/dsh-meter/pricing.json | jq -r '
 
 OpenRouter 的 `/api/v1/models` 是准的，但回答的是另一个问题——它报的是 **OpenRouter** 转售这个模型的报价，不是 DeepSeek 从你账户里扣的钱。
 
-**怎么保证它一直是对的。** [`scripts/verify-pricing.mjs`](scripts/verify-pricing.mjs) 会抓取 DeepSeek 自己的中英文两份价格页——价格、高峰窗口、模型列表——与随包发布的价目表逐项比对。[一个定时任务](.github/workflows/pricing-watch.yml)每天跑一次，一旦对不上就开 issue，页面结构变得解析不动了也照样报。本地执行：`npm run verify:pricing`。
+### 这些数字没有人手工敲
 
-上一次调价，我们盯着的任何渠道都没有收到通知。这就是要装这个警报的全部理由。
+我们不敲，也不建议你敲。手工维护的价目表一定会烂掉，而最好的证据来自厂商自己：DeepSeek 官方的 [pi 集成文档][pi-guide]里那段 `cost` 配置，v4-flash 的缓存读取价是一个 10 倍的小数点错误（写成 `0.028`，实际是 `0.0028`），v4-pro 的数字则正好是价目表的 4 倍——那是 Azure 的转售价，被贴进了 DeepSeek 自己的文档，而这一页是给人直接复制到 agent 配置里的。
+
+所以价目表由机器写、由人审：
+
+| | | |
+|---|---|---|
+| **读** | `scripts/verify-pricing.mjs` | 抓取中英文两份页面——价格、高峰窗口、模型列表——与价目表逐项比对 |
+| **写** | `scripts/apply-pricing.mjs` | 把抓到的数字写回 `lib/core.js`，然后**用校验脚本重新读一遍自己的输出**，读不通就回滚 |
+| **发** | `npm run build` | 用改写后的价目表重新生成 bundle、站点和数据源 |
+| **判** | 你 | 任务只开 PR，从不自己合并 |
+
+[每天一次的定时任务](.github/workflows/pricing-watch.yml)把这四步跑完。本地：`npm run verify:pricing` 只看，`npm run sync:pricing` 才改。
+
+**为什么只开 PR 不自动合并。** CI 能检查的全是结构性不变量——空闲价是高峰价的一半、输出比缓存未命中贵、当前请求不会按已退役的统一价计费——而一个「错得很合理」的解析结果能同时满足所有这些。没有任何测试能把「对的价格」和「像样的价格」区分开，但一个人看一眼 diff 可以。
+
+上一次调价，我们盯着的任何渠道都没有收到通知——这是要装警报的理由；厂商自己那个 10 倍的手误，则是把键盘从所有人手里拿走的理由。
+
+[pi-guide]: https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/pi_mono
 
 ## 钱是怎么算出来的
 

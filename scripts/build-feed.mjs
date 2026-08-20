@@ -22,8 +22,8 @@
  * function of lib/core.js — no timestamp, no fetch — so `--check` means the
  * file changes exactly when the card does.
  *
- * Usage: `node scripts/build-pricing.mjs` writes the feed;
- *        `node scripts/build-pricing.mjs --check` fails when it is stale.
+ * Usage: `node scripts/build-feed.mjs` writes the feed;
+ *        `node scripts/build-feed.mjs --check` fails when it is stale.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -150,11 +150,11 @@ if (process.argv.includes('--check')) {
     }
   })()
   if (current !== json) {
-    process.stderr.write('build-pricing: docs/pricing.json is stale — run `node scripts/build-pricing.mjs`\n')
+    process.stderr.write('build-feed: docs/pricing.json is stale — run `node scripts/build-feed.mjs`\n')
     process.exit(1)
   }
-  process.stdout.write('build-pricing: docs/pricing.json is in sync\n')
+  process.stdout.write('build-feed: docs/pricing.json is in sync\n')
 } else {
   writeFileSync(target, json)
-  process.stdout.write(`build-pricing: wrote docs/pricing.json (${json.length} bytes)\n`)
+  process.stdout.write(`build-feed: wrote docs/pricing.json (${json.length} bytes)\n`)
 }

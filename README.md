@@ -149,7 +149,7 @@ https://dsh.works/dsh-meter/pricing.json
 Static JSON, no key, no rate limit. Both currencies, both tariffs, the
 UTC schedule, the retired flat card for repricing history, and the
 bucket definitions — generated from [`lib/core.js`](lib/core.js) by
-[`scripts/build-pricing.mjs`](scripts/build-pricing.mjs), so it cannot
+[`scripts/build-feed.mjs`](scripts/build-feed.mjs), so it cannot
 state a price the meter would not charge.
 
 In JavaScript, skip the fetch and call the same module directly:

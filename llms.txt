@@ -52,7 +52,7 @@ DeepSeek's own pages and opens an issue on any disagreement.
 - [src/ui.js](src/ui.js): browser surface — the composer-dock line, the hover card, and the locale dictionaries
 - [scripts/build-client.mjs](scripts/build-client.mjs): inlines core + ui into `lib/client.js`, the bundle dsh serves; `--check` fails when stale
 - [scripts/build-site.mjs](scripts/build-site.mjs): inlines core into `docs/index.html`, the GitHub Pages site; renders its schedule strip and rate table from the same exports
-- [scripts/build-pricing.mjs](scripts/build-pricing.mjs): renders the card into `docs/pricing.json`, the published feed; `--check` fails when stale
+- [scripts/build-feed.mjs](scripts/build-feed.mjs): renders the card into `docs/pricing.json`, the published feed; `--check` fails when stale
 - [scripts/verify-pricing.mjs](scripts/verify-pricing.mjs): scrapes DeepSeek's two pricing pages and diffs them against the card — the daily drift alarm, run outside the test suite
 - [scripts/apply-pricing.mjs](scripts/apply-pricing.mjs): writes the scraped rates back into `lib/core.js`, then re-verifies its own output and reverts if that second read disagrees — the card is generated, not typed
 

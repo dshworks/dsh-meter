@@ -115,7 +115,7 @@ DeepSeek 公布的是**两张互相独立的价目表**——国际站按美元�
 https://dsh.works/dsh-meter/pricing.json
 ```
 
-静态 JSON，无需 key，不限流。两种货币、两个档位、24 小时 UTC 档位表、用于回算历史的已退役统一价，以及三个计费桶的定义——由 [`scripts/build-pricing.mjs`](scripts/build-pricing.mjs) 从 [`lib/core.js`](lib/core.js) 生成，所以它不可能报出一个电表自己不认的价。
+静态 JSON，无需 key，不限流。两种货币、两个档位、24 小时 UTC 档位表、用于回算历史的已退役统一价，以及三个计费桶的定义——由 [`scripts/build-feed.mjs`](scripts/build-feed.mjs) 从 [`lib/core.js`](lib/core.js) 生成，所以它不可能报出一个电表自己不认的价。
 
 JavaScript 里可以跳过这次 fetch，直接调同一个模块：
 

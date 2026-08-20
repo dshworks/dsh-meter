@@ -225,15 +225,39 @@ OpenRouter's `/api/v1/models` is accurate, but for a different question —
 it quotes what *OpenRouter* charges to resell the model, not what DeepSeek
 bills your account.
 
-**Keeping it honest.** [`scripts/verify-pricing.mjs`](scripts/verify-pricing.mjs)
-scrapes both of DeepSeek's own pricing pages — English and Chinese, prices,
-peak windows and model list — and diffs them against the shipped card.
-[A scheduled job](.github/workflows/pricing-watch.yml) runs it daily and
-opens an issue on any disagreement, including a page it can no longer
-parse. Run it yourself with `npm run verify:pricing`.
+### Nobody types these numbers
+
+Not us, and ideally not you. A hand-maintained rate card rots, and the
+vendor is the proof: DeepSeek's own [pi integration guide][pi-guide]
+ships a `cost` block where v4-flash's cache-read rate is a 10x decimal
+slip (`0.028` for a rate of `0.0028`) and the v4-pro figures are exactly
+4x the card — they are Azure's resale prices, pasted into DeepSeek's
+documentation, on a page people copy into their agent config.
+
+So the card is written by machine and reviewed by human:
+
+| | | |
+|---|---|---|
+| **read** | `scripts/verify-pricing.mjs` | scrapes both locales — prices, peak windows, model list — and diffs them against the card |
+| **write** | `scripts/apply-pricing.mjs` | splices the scraped values back into `lib/core.js`, then **re-runs the verifier against its own output** and reverts if that second read disagrees |
+| **ship** | `npm run build` | regenerates the bundle, the site and the feed from the rewritten card |
+| **judge** | you | the job opens a PR; it never merges one |
+
+[A daily job](.github/workflows/pricing-watch.yml) runs all four. Locally
+it is `npm run verify:pricing` to look and `npm run sync:pricing` to
+rewrite.
+
+**Why it opens a PR instead of merging.** Every invariant CI can check is
+structural — off-peak is half of peak, output costs more than a cache
+miss, a live request never prices at the retired card — and a
+wrong-but-plausible parse satisfies all of them. No test can tell a
+right price from a believable one. A human looking at a diff can.
 
 The last price change arrived with no announcement in any channel we
-watch. That is the whole argument for the alarm.
+watch. That is the argument for the alarm; the vendor's own 10x typo is
+the argument for taking the keyboard away from all of us.
+
+[pi-guide]: https://api-docs.deepseek.com/quick_start/agent_integrations/pi_mono
 
 ## How the money is counted
 

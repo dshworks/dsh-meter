@@ -66,6 +66,31 @@ The rate card stops being a private fact.
   index into a 24-hour array. Caught live: at 09:59 UTC `.[2]` reported
   `offpeak` while the tariff was `peak`.
 
+- **The card is generated now, not typed.** `scripts/apply-pricing.mjs`
+  splices the scraped rates and windows back into `lib/core.js`, then
+  **re-runs the verifier against its own output** and reverts if that
+  independent second read disagrees — so a splice that lands a value in
+  the wrong slot never survives. Proven by corrupting three unrelated
+  values (a USD rate, a CNY rate, a peak window) and watching it
+  reproduce the hand-written card byte for byte, retired `flat` rows
+  included, so a PR diff can only ever show a real price move.
+  `npm run sync:pricing` locally.
+- **The daily job now opens a PR instead of an issue.** It rewrites the
+  card, regenerates the bundle, site and feed, and pushes to one reusable
+  `pricing/auto-sync` branch. It still **never merges**: every invariant
+  CI checks is structural — off-peak is half of peak, output beats a
+  cache miss, a live request never prices at `flat` — and a
+  wrong-but-plausible parse satisfies all of them. No test can tell a
+  right price from a believable one. A page it cannot read, or cannot
+  rewrite from, still falls back to the issue path.
+- **Why any of this exists, in one link.** DeepSeek's own
+  [pi integration guide](https://api-docs.deepseek.com/quick_start/agent_integrations/pi_mono)
+  ships a `cost` block where v4-flash's cache-read rate is a 10x decimal
+  slip (`0.028` for `0.0028`) and the v4-pro figures are exactly 4x the
+  card — Azure's resale prices, pasted into DeepSeek's documentation, on
+  a page written to be copied into an agent config. Verified live
+  2026-08-20. A hand-maintained rate card rots; the vendor is the proof.
+
 ## 0.2.4 — 2026-08-17
 
 The switchover happened, and the rate card was already right.

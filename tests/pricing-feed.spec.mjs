@@ -51,6 +51,33 @@ describe('the published pricing feed', () => {
     expect(feed.timeOfUse.sinceEpochMs).toBe(TIME_OF_USE_FROM)
   })
 
+  it('states the Beijing anchor that makes a UTC schedule safe to publish', () => {
+    const { anchor } = feed.timeOfUse
+    expect(anchor.utcOffsetHours).toBe(8)
+    // If China ever observed DST again, fixed UTC hours would drift twice a
+    // year and the whole schedule representation would need rethinking.
+    expect(anchor.observesDaylightSaving).toBe(false)
+    // Display strings must be the same windows, not a second source of truth.
+    const fromUtc = PEAK_WINDOWS_UTC.map(([start, end]) => {
+      const local = hour => String((hour + anchor.utcOffsetHours) % 24).padStart(2, '0')
+      return `${local(start)}:00-${local(end)}:00`
+    })
+    expect(anchor.peakWindowsBeijing).toEqual(fromUtc)
+  })
+
+  it('tells a reader the one way to misread it', () => {
+    // The failure this guards against is real and silent: indexing a
+    // UTC-indexed schedule with local hours returns a plausible tariff that is
+    // wrong by 2x for most of the world.
+    expect(feed.timeOfUse.readingNow).toMatch(/getUTCHours/)
+    expect(feed.timeOfUse.readingNow).toMatch(/NEVER local hours/)
+    // And no field may claim to know what time it is — a cached copy would lie.
+    for (const key of ['now', 'currentTariff', 'asOf', 'generatedAt']) {
+      expect(feed.timeOfUse[key]).toBeUndefined()
+      expect(feed[key]).toBeUndefined()
+    }
+  })
+
   it('defines the three billed buckets, which is the half a price list cannot give you', () => {
     expect(Object.keys(feed.buckets).sort()).toEqual(['hit', 'miss', 'out'])
     for (const bucket of Object.values(feed.buckets)) expect(bucket.from).toMatch(/usage\./)

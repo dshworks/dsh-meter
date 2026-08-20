@@ -165,6 +165,45 @@ costOf(tokens, 'deepseek-v4-pro', tariffAt(Date.now()), 'cny')
 pure functions of their arguments — no clock reads inside, so history
 reprices at the tariff it was actually billed under.
 
+### What does it cost right now?
+
+The feed answers this **without containing a "now"**. It publishes the
+24-hour schedule; you index it with the current UTC hour. That is why a
+CDN can cache it for ten minutes, or you can vendor it into a binary,
+and it still cannot be stale about which tariff is running:
+
+```sh
+curl -s https://dsh.works/dsh-meter/pricing.json | jq -r '
+  (now|gmtime|.[3]) as $h
+  | .timeOfUse.scheduleUtc[$h] as $t
+  | "\($t) · v4-pro out $\(.models["deepseek-v4-pro"].rates[$t].usd.out)/1M"'
+```
+
+An endpoint that returned the answer instead would be wrong for as long
+as its cache lives, four times a day, on exactly the boundary where
+being wrong costs 2x.
+
+**Two ways to get this wrong, both silent:**
+
+- **Local hours.** `scheduleUtc` is indexed by UTC hour and is not
+  rotated into your timezone. `new Date().getHours()` returns a
+  plausible tariff that is wrong for most of the planet.
+- **Broken-down time offsets.** jq's `gmtime` is
+  `[year, month, day, hour, …]` — the hour is `.[3]`. Writing `.[2]`
+  reads the day of the month, which is a valid index into a 24-hour
+  array. Testing this section at 09:59 UTC, `.[2]` said `offpeak` while
+  the real tariff was `peak`. It looked completely reasonable.
+
+The schedule is anchored to Beijing (UTC+8), and China has not observed
+daylight saving since 1991 — that fixed offset is the only reason a
+table of UTC hours is safe to publish at all. The feed states it under
+`timeOfUse.anchor`, and `verify-pricing` checks the English page's UTC
+sentence and the Chinese page's Beijing sentence **separately**, then
+checks that they still agree.
+
+One caveat no feed can fix: `now` is your machine's clock. If it has
+drifted, so has your tariff.
+
 **Why not use an existing price feed?** Because none of them are right.
 Checked 2026-08-20, four days after the switchover, both of the sources
 an estimator usually reaches for still published DeepSeek's retired flat

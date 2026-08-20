@@ -16,9 +16,15 @@
  * because a documentation site is slow; a price alarm must not be silent
  * because nobody opened a PR this week. Different jobs, different clocks.
  *
+ * The parsing half is exported and unit-tested against synthetic footnotes
+ * (tests/verify-pricing.spec.mjs); only `main()` touches the network, and it
+ * runs only when this file is invoked directly.
+ *
  * Usage: `node scripts/verify-pricing.mjs`
  * Exit:  0 in sync, 1 drift found, 2 could not read the source.
  */
+import { pathToFileURL } from 'node:url'
+
 import { PEAK_WINDOWS_UTC, RATES } from '../lib/core.js'
 
 const PAGES = {
@@ -64,7 +70,7 @@ const priceOf = (cell) => {
  * @param {string} html - the page source.
  * @returns {{models: string[], rates: object}} model order and rates[model][tariff][bucket].
  */
-function scrape(html) {
+export function scrape(html) {
   const tables = html.match(/<table[\s\S]*?<\/table>/gi) ?? []
   const table = tables.find(candidate => Object.keys(RATES).every(model => candidate.includes(model)))
   if (table === undefined) throw new Error('no table on the page lists every model we price')
@@ -109,16 +115,47 @@ function scrape(html) {
   return { models, rates }
 }
 
-/** The peak windows the English footnote states, as `[start, end)` UTC hour pairs. */
-function scrapeWindows(html) {
-  const body = text(html)
-  const sentence = /Peak hours are ([^.]+)UTC/i.exec(body)
-  if (sentence === null) throw new Error('no "Peak hours are ... UTC" sentence on the page')
-  const hours = [...sentence[1].matchAll(/(\d{1,2}):00/g)].map(match => Number(match[1]))
-  if (hours.length === 0 || hours.length % 2 !== 0) throw new Error(`unpaired peak hours in "${sentence[1]}"`)
+/**
+ * Beijing is UTC+8 with no daylight saving — China abolished it in 1991 — so a
+ * fixed offset is safe here and no timezone database is needed. That constant
+ * offset is the only reason a Beijing-anchored policy can be stored as UTC
+ * hours at all; if it ever stopped holding, `PEAK_WINDOWS_UTC` would silently
+ * drift twice a year and nothing in the card would notice.
+ */
+const BEIJING_OFFSET_HOURS = 8
+
+/** Pair a flat list of hours into `[start, end)` windows. */
+const pairWindows = (hours, where) => {
+  if (hours.length === 0 || hours.length % 2 !== 0) throw new Error(`unpaired peak hours in ${where}`)
   const windows = []
   for (let index = 0; index < hours.length; index += 2) windows.push([hours[index], hours[index + 1]])
   return windows
+}
+
+/** The peak windows the English footnote states, as `[start, end)` UTC hour pairs. */
+export function scrapeWindows(html) {
+  const sentence = /Peak hours are ([^.]+)UTC/i.exec(text(html))
+  if (sentence === null) throw new Error('no "Peak hours are ... UTC" sentence on the page')
+  return pairWindows([...sentence[1].matchAll(/(\d{1,2}):00/g)].map(match => Number(match[1])), `"${sentence[1]}"`)
+}
+
+/**
+ * The same windows as the Chinese footnote states them — in Beijing time —
+ * converted to UTC.
+ *
+ * Checked separately and not assumed to agree: DeepSeek already publishes two
+ * independent rate cards for the two platforms, so two independent schedules
+ * are equally possible. If they ever diverge, the card needs a peak schedule
+ * per currency, which is a design change and not a number edit — exactly the
+ * kind of thing that should reach a human through an alarm rather than through
+ * a support ticket.
+ */
+export function scrapeWindowsCn(html) {
+  const sentence = /高峰时段为北京时间([^。]+)/.exec(text(html))
+  if (sentence === null) throw new Error('no "高峰时段为北京时间..." sentence on the page')
+  const beijing = [...sentence[1].matchAll(/(\d{1,2}):00/g)].map(match => Number(match[1]))
+  const utc = beijing.map(hour => (hour - BEIJING_OFFSET_HOURS + 24) % 24)
+  return pairWindows(utc, `"${sentence[1]}" (Beijing, converted at UTC+${BEIJING_OFFSET_HOURS})`)
 }
 
 const fetchPage = async (url) => {
@@ -127,69 +164,80 @@ const fetchPage = async (url) => {
   return await response.text()
 }
 
-const drift = []
-const note = message => process.stdout.write(`${message}\n`)
+/** The network half: fetch both pages, diff them against the card, report. */
+async function main() {
+  const drift = []
+  const note = message => process.stdout.write(`${message}\n`)
 
-let usdHtml
-for (const [currency, url] of Object.entries(PAGES)) {
-  let html
-  try {
-    html = await fetchPage(url)
-  } catch (error) {
-    process.stderr.write(`verify-pricing: could not read ${url} — ${error.message}\n`)
-    process.exit(2)
-  }
-  if (currency === 'usd') usdHtml = html
+  const pages = {}
+  for (const [currency, url] of Object.entries(PAGES)) {
+    let html
+    try {
+      html = await fetchPage(url)
+    } catch (error) {
+      process.stderr.write(`verify-pricing: could not read ${url} — ${error.message}\n`)
+      process.exit(2)
+    }
+    pages[currency] = html
 
-  let scraped
-  try {
-    scraped = scrape(html)
-  } catch (error) {
-    // A parse failure is an alert, not a pass: the page changed shape.
-    process.stderr.write(`verify-pricing: could not parse ${url} — ${error.message}\n`)
-    process.exit(2)
-  }
+    let scraped
+    try {
+      scraped = scrape(html)
+    } catch (error) {
+      // A parse failure is an alert, not a pass: the page changed shape.
+      process.stderr.write(`verify-pricing: could not parse ${url} — ${error.message}\n`)
+      process.exit(2)
+    }
 
-  const priced = Object.keys(RATES)
-  for (const model of scraped.models) {
-    if (!priced.includes(model)) drift.push(`\`${model}\` is priced upstream but absent from the card (${currency}) — the meter bills it at zero`)
-  }
-  for (const model of priced) {
-    if (!scraped.models.includes(model)) drift.push(`\`${model}\` is on the card but no longer listed upstream (${currency})`)
-  }
+    const priced = Object.keys(RATES)
+    for (const model of scraped.models) {
+      if (!priced.includes(model)) drift.push(`\`${model}\` is priced upstream but absent from the card (${currency}) — the meter bills it at zero`)
+    }
+    for (const model of priced) {
+      if (!scraped.models.includes(model)) drift.push(`\`${model}\` is on the card but no longer listed upstream (${currency})`)
+    }
 
-  for (const [model, byTariff] of Object.entries(RATES)) {
-    for (const tariff of ['offpeak', 'peak']) {
-      for (const bucket of ['hit', 'miss', 'out']) {
-        const ours = byTariff[tariff][currency][bucket]
-        const theirs = scraped.rates[model]?.[tariff]?.[bucket]
-        if (theirs === undefined) {
-          drift.push(`\`${model}\` ${tariff} ${bucket} (${currency}) is missing from the published table`)
-        } else if (Math.abs(theirs - ours) > 1e-9) {
-          drift.push(`\`${model}\` ${tariff} ${bucket} (${currency}): card says **${ours}**, DeepSeek says **${theirs}**`)
+    for (const [model, byTariff] of Object.entries(RATES)) {
+      for (const tariff of ['offpeak', 'peak']) {
+        for (const bucket of ['hit', 'miss', 'out']) {
+          const ours = byTariff[tariff][currency][bucket]
+          const theirs = scraped.rates[model]?.[tariff]?.[bucket]
+          if (theirs === undefined) {
+            drift.push(`\`${model}\` ${tariff} ${bucket} (${currency}) is missing from the published table`)
+          } else if (Math.abs(theirs - ours) > 1e-9) {
+            drift.push(`\`${model}\` ${tariff} ${bucket} (${currency}): card says **${ours}**, DeepSeek says **${theirs}**`)
+          }
         }
       }
     }
+    note(`checked ${currency}: ${scraped.models.length} models, ${url}`)
   }
-  note(`checked ${currency}: ${scraped.models.length} models, ${url}`)
+
+  try {
+    const ours = JSON.stringify(PEAK_WINDOWS_UTC)
+    const en = scrapeWindows(pages.usd)
+    const cn = scrapeWindowsCn(pages.cny)
+    if (JSON.stringify(en) !== ours) drift.push(`peak windows (UTC, English page): card says **${ours}**, DeepSeek says **${JSON.stringify(en)}**`)
+    if (JSON.stringify(cn) !== ours) drift.push(`peak windows (Beijing page, converted to UTC): card says **${ours}**, DeepSeek says **${JSON.stringify(cn)}**`)
+    if (JSON.stringify(en) !== JSON.stringify(cn)) {
+      drift.push(`the two pages no longer agree on the schedule: English **${JSON.stringify(en)}** vs Beijing-converted **${JSON.stringify(cn)}** — the card holds ONE schedule for both platforms and would need one per currency`)
+    }
+    note(`checked peak windows: ${JSON.stringify(en)} UTC (English), ${JSON.stringify(cn)} UTC (Beijing page, converted)`)
+  } catch (error) {
+    process.stderr.write(`verify-pricing: could not read the peak windows — ${error.message}\n`)
+    process.exit(2)
+  }
+
+  if (drift.length === 0) {
+    note('\nverify-pricing: the card matches both published tables.')
+    process.exit(0)
+  }
+
+  process.stdout.write(`\nDeepSeek's published pricing no longer matches \`lib/core.js\`:\n\n${drift.map(line => `- ${line}`).join('\n')}\n\n`)
+  process.stdout.write(`Sources: ${Object.values(PAGES).join(' , ')}\n\n`)
+  process.stdout.write('Fix the \`PRICING-TABLE\` block in `lib/core.js`, run `npm run build`, and check `tests/tariff.spec.mjs` still holds — it pins invariants (off-peak is half of peak, the cache discount) that a new card can break.\n')
+  process.exit(1)
 }
 
-try {
-  const windows = scrapeWindows(usdHtml)
-  const ours = JSON.stringify(PEAK_WINDOWS_UTC)
-  if (JSON.stringify(windows) !== ours) drift.push(`peak windows (UTC): card says **${ours}**, DeepSeek says **${JSON.stringify(windows)}**`)
-  note(`checked peak windows: ${JSON.stringify(windows)} UTC`)
-} catch (error) {
-  process.stderr.write(`verify-pricing: could not read the peak windows — ${error.message}\n`)
-  process.exit(2)
-}
-
-if (drift.length === 0) {
-  note('\nverify-pricing: the card matches both published tables.')
-  process.exit(0)
-}
-
-process.stdout.write(`\nDeepSeek's published pricing no longer matches \`lib/core.js\`:\n\n${drift.map(line => `- ${line}`).join('\n')}\n\n`)
-process.stdout.write(`Sources: ${Object.values(PAGES).join(' , ')}\n\n`)
-process.stdout.write('Fix the \`PRICING-TABLE\` block in `lib/core.js`, run `npm run build`, and check `tests/tariff.spec.mjs` still holds — it pins invariants (off-peak is half of peak, the cache discount) that a new card can break.\n')
-process.exit(1)
+// Importing this file for its parsers must not fetch anything.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) await main()

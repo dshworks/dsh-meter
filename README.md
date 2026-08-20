@@ -71,6 +71,14 @@ out in amber and the countdown runs to the next off-peak hour:
 Live-verified against dsh `0.1.0-rc.6` on 2026-08-15, in a real web
 session on DeepSeek-V4-Pro — not a mock:
 
+> **Through `0.1.0-rc.8`, checked at the source rather than re-run.** The one
+> harness package this plugin reads, `@deepseek-ai/dsh-session-projection`, has
+> a byte-identical `src/` in rc.7 and rc.8, so the projection schema the fold
+> below is written against did not move. rc.8 does change the SQLite storage
+> format incompatibly — that is the store underneath the projection, not the
+> projection, and this plugin never touches it. The receipts in the table are
+> still rc.6 receipts; nobody has re-run them on rc.8.
+
 | Claim | How it was checked |
 |---|---|
 | Loads in a stock web profile | `dsh --profile web --dump-config` lists it; `/plugins/@dshworks/dsh-meter/client.js` serves 200 |
@@ -351,4 +359,6 @@ usage ledger.
 
 ## License
 
-MIT
+MIT. Not affiliated with DeepSeek. "DeepSeek Harness" is DeepSeek's trademark, used
+here only to say what this works with; the name follows the "DSH" form their
+[brand guidelines](https://github.com/deepseek-ai/deepseek-harness/blob/master/BRAND_GUIDELINES.md) recommend.

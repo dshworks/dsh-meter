@@ -9,7 +9,7 @@ The rate card stops being a private fact.
   limit: both currencies, both live tariffs, the 24-hour UTC schedule, the
   retired flat card with the date it stopped applying, and the definition
   of each billed bucket. Generated from `lib/core.js` by
-  `scripts/build-pricing.mjs` and checked by `pnpm test`, so the feed
+  `scripts/build-feed.mjs` and checked by `pnpm test`, so the feed
   cannot state a price the meter would not charge. It is a pure function
   of the card — no timestamp, no fetch — so the file changes exactly when
   the price does.
@@ -101,6 +101,32 @@ The rate card stops being a private fact.
   card — Azure's resale prices, pasted into DeepSeek's documentation, on
   a page written to be copied into an agent config. Verified live
   2026-08-20. A hand-maintained rate card rots; the vendor is the proof.
+
+- **The hero instrument actually ticks.** It always repainted every second,
+  but `formatCountdown` rounds to `46m`, so nothing on screen moved and the
+  card read as a screenshot. The hero gets its own sharper formatter
+  (`14:11:49`), a wall clock beside the timezone, and a flip animation —
+  because the page's whole claim is that this is a rate you are standing
+  in, and the cheapest possible proof is a digit that moves. The zone now
+  renders as `PDT` rather than `America/Los_Angeles`, which was pushing
+  the clock off the row; the IANA name is one hover away.
+- **What the flip does to the bill, once instead of three times.** The
+  card briefly showed a `→ next price` per row. Off-peak is exactly half
+  of peak on every row, so that was one fact printed three times in a
+  narrow column. It is now a single derived clause — `everything 2×` —
+  computed from `RATES`, so it stops saying 2x the day the card stops
+  meaning it.
+- **Generated files say so, and get out of the way in review.**
+  `docs/index.html` was generated and admitted it nowhere; it now carries
+  a banner like `lib/client.js` always did. New `.gitattributes` marks
+  the three artifacts `linguist-generated`, so the automated pricing PR
+  opens on the one file a human has to check instead of on a 47 KB
+  inlined bundle.
+- **`build-pricing.mjs` is now `build-feed.mjs`.** Three `*-pricing`
+  scripts and two `build-*` scripts, with one file in both families, made
+  the flat `scripts/` directory harder to read than it needed to be. The
+  three generators are now `build-client`, `build-site`, `build-feed`;
+  the two that talk to DeepSeek are `verify-pricing` and `apply-pricing`.
 
 ## 0.2.4 — 2026-08-17
 

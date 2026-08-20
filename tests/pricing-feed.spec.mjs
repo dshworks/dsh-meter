@@ -6,7 +6,7 @@ import { PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM, tariffSchedule } from '../li
 /**
  * docs/pricing.json is published at a stable URL for other people's cost
  * estimators to read. Its staleness is already caught by
- * `build-pricing.mjs --check`; what these tests pin is the part a
+ * `build-feed.mjs --check`; what these tests pin is the part a
  * regeneration would happily rewrite — the shape strangers pin against, and
  * the rule that a retired price never appears as a live one.
  */

@@ -1,0 +1,10 @@
+# Generated artifacts. Edit the source and run `npm run build`; never edit these.
+#
+# `linguist-generated` collapses them in review by default (still expandable),
+# which matters most on the automated pricing-sync PR: a rate change rewrites
+# one line of the card and then ripples through a 47 KB inlined bundle, a
+# 50 KB page and the feed. The line a human has to check is the one in
+# lib/core.js, and it should not be four scrolls down.
+lib/client.js     linguist-generated=true
+docs/index.html   linguist-generated=true
+docs/pricing.json linguist-generated=true

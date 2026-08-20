@@ -438,9 +438,16 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem
 and 14:00&ndash;18:00 Beijing); every other hour is off-peak, including the two-hour
 gap between the windows. Off-peak is exactly half of peak. A cache hit bills at
 1/{{CACHE_DISCOUNT}} of a miss, which is the ratio worth designing a prompt around.
-Rates re-checked 2026-08-17 against <a href="https://api-docs.deepseek.com/quick_start/pricing">DeepSeek's pricing page</a>;
-the retired flat card is kept in the plugin so old sessions still cost what they
-actually cost.</p>
+These rates are diffed against <a href="https://api-docs.deepseek.com/quick_start/pricing">DeepSeek's
+own pricing pages</a>, both locales, by a job that runs every day and opens an issue
+on any disagreement &mdash; last confirmed in sync 2026-08-20. The retired flat card is
+kept in the plugin so old sessions still cost what they actually cost.</p>
+
+<p class="fine">Building your own estimator? Take the card, not these numbers:
+<a href="https://dsh.works/dsh-meter/pricing.json"><code>pricing.json</code></a> is the
+same table as machine-readable JSON &mdash; both currencies, both tariffs, the UTC
+schedule and the billed-bucket definitions, generated from the file the plugin runs on.
+No key, no rate limit.</p>
 
 <h2 id="install">Install</h2>
 
@@ -469,6 +476,7 @@ the <a href="https://github.com/dshworks/dsh-meter#readme">README</a>
     <a href="https://github.com/dshworks/dsh-meter">repo</a>
     <a href="https://www.npmjs.com/package/@dshworks/dsh-meter">npm</a>
     <a href="https://github.com/dshworks/dsh-meter/blob/main/CHANGELOG.md">changelog</a>
+    <a href="https://dsh.works/dsh-meter/pricing.json">pricing.json</a>
     <a href="https://dsh.works/awesome-dsh-plugins/">plugin registry</a>
     <a href="https://github.com/deepseek-ai/deepseek-harness">dsh</a>
   </nav>

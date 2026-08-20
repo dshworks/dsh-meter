@@ -22,6 +22,15 @@ Site: <https://dsh.works/dsh-meter/> — carries a working copy of the tariff
 clock (the visitor's own timezone, the live rate card) generated from
 `lib/core.js`, so the page cannot state a price the plugin would not.
 
+Pricing feed: <https://dsh.works/dsh-meter/pricing.json> — the same card as
+machine-readable JSON for anyone building their own estimator. Static, no
+key, no rate limit; both currencies, both tariffs, the UTC schedule, the
+retired flat card for repricing history, and the billed-bucket definitions.
+Published because no general price aggregator models time-of-use billing:
+a schema with one flat price per model cannot express a rate that doubles
+for seven hours of every UTC day. A daily job diffs the card against
+DeepSeek's own pages and opens an issue on any disagreement.
+
 ## Docs
 
 - [README](README.md): what it shows, the rate card, how the money is counted, configuration, limitations
@@ -38,9 +47,12 @@ clock (the visitor's own timezone, the live rate card) generated from
 - [src/ui.js](src/ui.js): browser surface — the composer-dock line, the hover card, and the locale dictionaries
 - [scripts/build-client.mjs](scripts/build-client.mjs): inlines core + ui into `lib/client.js`, the bundle dsh serves; `--check` fails when stale
 - [scripts/build-site.mjs](scripts/build-site.mjs): inlines core into `docs/index.html`, the GitHub Pages site; renders its schedule strip and rate table from the same exports
+- [scripts/build-pricing.mjs](scripts/build-pricing.mjs): renders the card into `docs/pricing.json`, the published feed; `--check` fails when stale
+- [scripts/verify-pricing.mjs](scripts/verify-pricing.mjs): scrapes DeepSeek's two pricing pages and diffs them against the card — the daily drift alarm, run outside the test suite
 
 ## Optional
 
 - [tests/ledger.spec.mjs](tests/ledger.spec.mjs): the fold's contract, including chunk-then-message replacement and boundary-crossing sessions
 - [tests/tariff.spec.mjs](tests/tariff.spec.mjs): the rate card and the tariff clock
 - [tests/balance.spec.mjs](tests/balance.spec.mjs): the balance reader's caching, coalescing, and failure modes
+- [tests/pricing-feed.spec.mjs](tests/pricing-feed.spec.mjs): the published feed's shape — the keys other people's estimators pin against, and the rule that a retired price never appears as a live one

@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+The rate card stops being a private fact.
+
+- **`docs/pricing.json`**, served at
+  <https://dsh.works/dsh-meter/pricing.json>. Static JSON, no key, no rate
+  limit: both currencies, both live tariffs, the 24-hour UTC schedule, the
+  retired flat card with the date it stopped applying, and the definition
+  of each billed bucket. Generated from `lib/core.js` by
+  `scripts/build-pricing.mjs` and checked by `pnpm test`, so the feed
+  cannot state a price the meter would not charge. It is a pure function
+  of the card — no timestamp, no fetch — so the file changes exactly when
+  the price does.
+- **Because no external source is right.** Checked 2026-08-20, four days
+  after the switchover, models.dev and LiteLLM's
+  `model_prices_and_context_window.json` both still published DeepSeek's
+  retired flat card as current — understating a v4-pro bill by 1.5x
+  off-peak, 3x at peak, and 12x on cached input at peak. Neither is a
+  staleness bug they can patch: both schemas hold one flat price per model
+  per bucket, with nowhere to put a tariff. OpenRouter's numbers are
+  accurate but answer a different question — what OpenRouter charges to
+  resell the model, not what DeepSeek deducts from your account.
+- **`scripts/verify-pricing.mjs`** diffs the shipped card against
+  DeepSeek's own two pricing pages — English and Chinese, every rate, the
+  peak windows, and the model list, since a model priced upstream and
+  missing here would meter at zero. A page it can no longer parse exits
+  non-zero too: the alarm should fire when the source changes shape, not
+  only when a number moves.
+- **A daily job** (`.github/workflows/pricing-watch.yml`) runs it and opens
+  or comments on a `pricing-drift` issue. The last price change arrived
+  with no announcement in any channel we watch, which is the entire
+  argument for it. Deliberately outside `pnpm test`: a unit suite must not
+  fail because a documentation site is slow, and a price alarm must not
+  stay silent because nobody opened a PR this week.
+- `pnpm run build` now regenerates all three artifacts;
+  `pnpm run verify:pricing` is the network check. Both READMEs document
+  the feed, the npm route (`@dshworks/dsh-meter/core`, which imports
+  nothing), and why the aggregators are wrong.
+
 ## 0.2.4 — 2026-08-17
 
 The switchover happened, and the rate card was already right.

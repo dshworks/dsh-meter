@@ -105,7 +105,44 @@ DeepSeek 公布的是**两张互相独立的价目表**——国际站按美元�
 
 </details>
 
-来源：<https://api-docs.deepseek.com/quick_start/pricing>，于 2026-08-17 重新核对——并且核对过真实账单：v4-pro 一次 188,542 缓存未命中 tokens 的调用，空闲时段实扣 ¥0.84，即每百万 ¥4.46，对应公布的 4.5。
+来源：<https://api-docs.deepseek.com/quick_start/pricing>，每天与中英文两份页面自动比对（见下节），最近一次确认一致为 2026-08-20——并且核对过真实账单：v4-pro 一次 188,542 缓存未命中 tokens 的调用，空闲时段实扣 ¥0.84，即每百万 ¥4.46，对应公布的 4.5。
+
+## 价目表也是一份数据源
+
+自己做用量估算？取这份数据，别抄上面表格里的数字。
+
+```
+https://dsh.works/dsh-meter/pricing.json
+```
+
+静态 JSON，无需 key，不限流。两种货币、两个档位、24 小时 UTC 档位表、用于回算历史的已退役统一价，以及三个计费桶的定义——由 [`scripts/build-pricing.mjs`](scripts/build-pricing.mjs) 从 [`lib/core.js`](lib/core.js) 生成，所以它不可能报出一个电表自己不认的价。
+
+JavaScript 里可以跳过这次 fetch，直接调同一个模块：
+
+```js
+import { costOf, tariffAt } from '@dshworks/dsh-meter/core'
+
+const tokens = { miss: 188_542, hit: 1_204_880, out: 9_310 }
+costOf(tokens, 'deepseek-v4-pro', tariffAt(Date.now()), 'cny')
+```
+
+`lib/core.js` 不依赖任何包。价目表、档位时钟、成本折叠都是纯函数，内部不读时钟，所以历史会话按它当时真实的档位回算。
+
+**为什么不直接用现成的价格源？** 因为没有一个是对的。2026-08-20 复核，也就是切换四天之后，做估算最常用的两个源仍然把 DeepSeek 已退役的统一价当作现价发布：
+
+| 数据源 | v4-pro 缓存未命中输入 | 相对真实账单少算 |
+|---|---|---|
+| [models.dev](https://models.dev/api.json) | $0.435 | 空闲 1.5 倍，高峰 3.0 倍 |
+| [LiteLLM](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) | $0.435 | 空闲 1.5 倍，高峰 3.0 倍 |
+| 本数据源 | 空闲 $0.66 / 高峰 $1.32 | — |
+
+在缓存命中输入这一桶——agent 发得最多的那一桶——models.dev 在高峰时段少算 **12 倍**。而且这不是他们补一次数据就能修的：两家的 schema 都是「每模型每桶一个固定单价」，根本没有放档位的位置。一个每天有七个小时是错的价格，在这两种结构里都表达不出来。
+
+OpenRouter 的 `/api/v1/models` 是准的，但回答的是另一个问题——它报的是 **OpenRouter** 转售这个模型的报价，不是 DeepSeek 从你账户里扣的钱。
+
+**怎么保证它一直是对的。** [`scripts/verify-pricing.mjs`](scripts/verify-pricing.mjs) 会抓取 DeepSeek 自己的中英文两份价格页——价格、高峰窗口、模型列表——与随包发布的价目表逐项比对。[一个定时任务](.github/workflows/pricing-watch.yml)每天跑一次，一旦对不上就开 issue，页面结构变得解析不动了也照样报。本地执行：`npm run verify:pricing`。
+
+上一次调价，我们盯着的任何渠道都没有收到通知。这就是要装这个警报的全部理由。
 
 ## 钱是怎么算出来的
 
@@ -152,10 +189,13 @@ DeepSeek 公布的是**两张互相独立的价目表**——国际站按美元�
 ```sh
 pnpm install
 pnpm test                        # 先校验产物同步，再跑 vitest
-node scripts/build-client.mjs    # 改完 core/ui 后重新生成 lib/client.js
+pnpm run build                   # 改完 core/ui 后重新生成三份产物
+pnpm run verify:pricing          # 与 DeepSeek 官方价格页逐项比对（需联网）
 ```
 
-`lib/core.js` 是价目表、时段时钟和折叠逻辑，`lib/balance.js` 是账户读取，`src/ui.js` 是浏览器界面。`scripts/build-client.mjs` 把 core 与 ui 内联成 dsh 实际分发的 `lib/client.js`——价目表因此只存在于一个文件里，产物一旦与源码不同步 `pnpm test` 就会失败。
+`lib/core.js` 是价目表、时段时钟和折叠逻辑，`lib/balance.js` 是账户读取，`src/ui.js` 是浏览器界面。三份产物都由这一份价目表生成——`lib/client.js`（dsh 实际分发的 bundle）、`docs/index.html`（站点）、`docs/pricing.json`（数据源）——价目表因此只存在于一个文件里，任何一份产物与源码不同步 `pnpm test` 就会失败。
+
+`verify:pricing` 是唯一联网的脚本，并且刻意不放进 `pnpm test`：单元测试不该因为一个文档站点慢而失败，价格警报也不该因为这周没人提 PR 而沉默。它按自己的日程每天跑。
 
 ## 已知限制
 

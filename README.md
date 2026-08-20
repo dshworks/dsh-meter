@@ -133,9 +133,68 @@ cheapest token, which is the one an agent sends most of.
 
 </details>
 
-Source: <https://api-docs.deepseek.com/quick_start/pricing>, re-checked
-2026-08-17 — and against a real bill: 188,542 cache-miss tokens on pro,
+Source: <https://api-docs.deepseek.com/quick_start/pricing>, diffed
+against both locales daily (see below), last confirmed in sync
+2026-08-20 — and against a real bill: 188,542 cache-miss tokens on pro,
 off-peak, settled at ¥0.84, i.e. ¥4.46/1M against the published 4.5.
+
+## The card is also a feed
+
+Building your own estimator? Take the card, not the numbers in this table.
+
+```
+https://dsh.works/dsh-meter/pricing.json
+```
+
+Static JSON, no key, no rate limit. Both currencies, both tariffs, the
+UTC schedule, the retired flat card for repricing history, and the
+bucket definitions — generated from [`lib/core.js`](lib/core.js) by
+[`scripts/build-pricing.mjs`](scripts/build-pricing.mjs), so it cannot
+state a price the meter would not charge.
+
+In JavaScript, skip the fetch and call the same module directly:
+
+```js
+import { costOf, tariffAt } from '@dshworks/dsh-meter/core'
+
+const tokens = { miss: 188_542, hit: 1_204_880, out: 9_310 }
+costOf(tokens, 'deepseek-v4-pro', tariffAt(Date.now()), 'cny')
+```
+
+`lib/core.js` imports nothing. Rate card, tariff clock, and cost fold are
+pure functions of their arguments — no clock reads inside, so history
+reprices at the tariff it was actually billed under.
+
+**Why not use an existing price feed?** Because none of them are right.
+Checked 2026-08-20, four days after the switchover, both of the sources
+an estimator usually reaches for still published DeepSeek's retired flat
+card as current:
+
+| Source | v4-pro cache-miss input | Understates the real bill by |
+|---|---|---|
+| [models.dev](https://models.dev/api.json) | $0.435 | 1.5x off-peak, 3.0x peak |
+| [LiteLLM](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) | $0.435 | 1.5x off-peak, 3.0x peak |
+| this feed | $0.66 off-peak / $1.32 peak | — |
+
+On cached input, the bucket an agent sends most of, models.dev is off by
+**12x at peak**. And this is not a staleness bug they can patch: both
+schemas hold one flat price per model per bucket, with nowhere to put a
+tariff. A number that is wrong for seven hours of every UTC day cannot be
+represented correctly in either.
+
+OpenRouter's `/api/v1/models` is accurate, but for a different question —
+it quotes what *OpenRouter* charges to resell the model, not what DeepSeek
+bills your account.
+
+**Keeping it honest.** [`scripts/verify-pricing.mjs`](scripts/verify-pricing.mjs)
+scrapes both of DeepSeek's own pricing pages — English and Chinese, prices,
+peak windows and model list — and diffs them against the shipped card.
+[A scheduled job](.github/workflows/pricing-watch.yml) runs it daily and
+opens an issue on any disagreement, including a page it can no longer
+parse. Run it yourself with `npm run verify:pricing`.
+
+The last price change arrived with no announcement in any channel we
+watch. That is the whole argument for the alarm.
 
 ## How the money is counted
 
@@ -184,16 +243,22 @@ Everything below is a validated config field, set in your profile's
 
 ```sh
 pnpm install
-pnpm test                        # bundle-sync check, then vitest
-node scripts/build-client.mjs    # regenerate lib/client.js after editing core/ui
+pnpm test                        # generated-artifact checks, then vitest
+pnpm run build                   # regenerate all three artifacts after editing core/ui
+pnpm run verify:pricing          # diff the card against DeepSeek's own pages (network)
 ```
 
 `lib/core.js` holds the rate card, the tariff clock, and the fold.
 `lib/balance.js` is the account reader. `src/ui.js` is the browser
-surface. `scripts/build-client.mjs` inlines core + ui into
-`lib/client.js`, the bundle the harness serves — so the price table
-exists in exactly one file, and `pnpm test` fails if the generated bundle
-drifts from it.
+surface. Three artifacts are generated from that one card —
+`lib/client.js` (the bundle the harness serves), `docs/index.html` (the
+site) and `docs/pricing.json` (the feed) — so the price table exists in
+exactly one file, and `pnpm test` fails if any of them drifts from it.
+
+`verify:pricing` is the only script that touches the network, and it is
+deliberately outside `pnpm test`: a unit suite must not fail because a
+documentation site is slow, and a price alarm must not stay silent
+because nobody opened a PR this week. It runs on its own daily schedule.
 
 ## Known limitations
 

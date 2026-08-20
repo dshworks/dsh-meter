@@ -83,6 +83,17 @@ The rate card stops being a private fact.
   wrong-but-plausible parse satisfies all of them. No test can tell a
   right price from a believable one. A page it cannot read, or cannot
   rewrite from, still falls back to the issue path.
+- **Two defects in the sync job, found by rehearsing it rather than by
+  waiting for a price to move.** `gh pr view` finds CLOSED pull requests
+  too, so the next change would have been posted as a comment on a dead
+  PR instead of opening a live one — it now checks `state == OPEN`. And
+  the "did anything actually change?" guard used `git status
+  --porcelain`, which counts untracked files: the step leaves
+  `report.md`, `error.txt` and `applied.txt` in the tree, so the guard
+  could never fire. It asks `git diff --quiet HEAD -- lib docs` instead.
+  Rehearsed against a scratch remote with a stale card committed as HEAD:
+  verify exits 1, the card is repaired from source, and the commit is
+  exactly the four artifacts — 7 lines, all of them prices.
 - **Why any of this exists, in one link.** DeepSeek's own
   [pi integration guide](https://api-docs.deepseek.com/quick_start/agent_integrations/pi_mono)
   ships a `cost` block where v4-flash's cache-read rate is a 10x decimal

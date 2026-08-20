@@ -56,6 +56,14 @@ jobs:
           cat applied.txt
           if [ "$applied" -ne 0 ]; then echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           npm run build >> applied.txt 2>&1 || { echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          # The verifier saw drift, so a TRACKED file must have moved. Ask git
+          # about the artifacts only: this step leaves report.md, error.txt and
+          # applied.txt in the tree, so a bare `git status --porcelain` always
+          # looks dirty and would wave through a run that changed nothing.
+          if git diff --quiet HEAD -- lib docs; then
+            echo "the verifier reported drift but apply-pricing changed nothing" >> applied.txt
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           echo "ok=true" >> "$GITHUB_OUTPUT"
           set -e
 
@@ -68,7 +76,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           git add lib/core.js lib/client.js docs/index.html docs/pricing.json
-          git diff --cached --quiet && { echo "verifier saw drift but nothing changed on disk — bailing to the issue path"; exit 1; }
           {
             echo "DeepSeek's published pricing changed. The card, the bundle, the site and the feed"
             echo "were rewritten from the source by \`scripts/apply-pricing.mjs\`, which re-read both"
@@ -83,9 +90,14 @@ jobs:
           } > pr-body.md
           git commit -q -m "chore: sync the rate card with DeepSeek's published tables" -m "Written by scripts/apply-pricing.mjs from api-docs.deepseek.com, both locales, and re-verified against the source before commit. Review the diff — no test can tell a plausible wrong price from a right one."
           git push -f origin "$BRANCH"
-          gh pr view "$BRANCH" --json number >/dev/null 2>&1 \
-            && gh pr comment "$BRANCH" --body-file pr-body.md \
-            || gh pr create --head "$BRANCH" --title "Sync the rate card with DeepSeek's published tables" --body-file pr-body.md
+          # `gh pr view` finds CLOSED pull requests too, so asking only whether one
+          # exists would post the next price change as a comment on a dead PR.
+          state=$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || true)
+          if [ "$state" = "OPEN" ]; then
+            gh pr comment "$BRANCH" --body-file pr-body.md
+          else
+            gh pr create --head "$BRANCH" --title "Sync the rate card with DeepSeek's published tables" --body-file pr-body.md
+          fi
 
       # A page we cannot read, or cannot rewrite from, is not a pass. It is a
       # quieter kind of drift, and it needs a human rather than a diff.

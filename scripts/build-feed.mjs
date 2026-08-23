@@ -125,16 +125,25 @@ const feed = {
 
   models: Object.fromEntries(Object.entries(RATES).map(([model, byTariff]) => [model, {
     rates: ratesOf(byTariff, live),
-    retired: {
-      /* Kept because a ledger reprices history: a session logged before the
-       * switchover must still cost what it actually cost. Never quote it for
-       * a new request. */
-      flat: {
-        ...ratesOf(byTariff, ['flat']).flat,
-        until: new Date(TIME_OF_USE_FROM).toISOString(),
-        note: 'The single all-day rate DeepSeek billed before time-of-use. Retired — several third-party price feeds still publish it as current.',
+    /* Kept because a ledger reprices history: a session logged before the
+     * switchover must still cost what it actually cost. Never quote it for
+     * a new request.
+     *
+     * Omitted entirely for a model that never billed under a flat rate --
+     * deepseek-v4-flash-vision-exp shipped after the switchover, so it has no
+     * pre-time-of-use history to reprice. `apply-pricing` already drops the
+     * row for such a model (see its `held === undefined` branch); emitting
+     * `retired.flat: { until, note }` with no rates would publish an empty
+     * card that reads like a real one. An absent key is the honest shape. */
+    ...(byTariff.flat === undefined ? {} : {
+      retired: {
+        flat: {
+          ...ratesOf(byTariff, ['flat']).flat,
+          until: new Date(TIME_OF_USE_FROM).toISOString(),
+          note: 'The single all-day rate DeepSeek billed before time-of-use. Retired — several third-party price feeds still publish it as current.',
+        },
       },
-    },
+    }),
   }])),
 }
 

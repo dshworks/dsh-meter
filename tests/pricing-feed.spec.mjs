@@ -23,10 +23,19 @@ describe('the published pricing feed', () => {
   })
 
   it('quotes only tariffs a new request can actually be billed at', () => {
-    for (const model of Object.values(feed.models)) {
+    for (const [name, model] of Object.entries(feed.models)) {
       expect(Object.keys(model.rates).sort()).toEqual(['offpeak', 'peak'])
       // The pre-switchover card is reachable, but only under `retired`, and
       // only with the date it stopped applying attached.
+      //
+      // A model that never billed flat publishes no `retired` key at all,
+      // rather than an empty card carrying only `until` and `note` -- a
+      // consumer reading `retired.flat.usd.out` off that would get
+      // `undefined` from a block that looks published.
+      if (RATES[name].flat === undefined) {
+        expect(model.retired).toBeUndefined()
+        continue
+      }
       expect(model.retired.flat.until).toBe(new Date(TIME_OF_USE_FROM).toISOString())
     }
   })
@@ -38,6 +47,7 @@ describe('the published pricing feed', () => {
           expect(feed.models[name].rates[tariff][currency]).toEqual(byTariff[tariff][currency])
         }
       }
+      if (byTariff.flat === undefined) continue
       for (const currency of ['usd', 'cny']) {
         expect(feed.models[name].retired.flat[currency]).toEqual(byTariff.flat[currency])
       }

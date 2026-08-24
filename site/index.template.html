@@ -242,6 +242,7 @@ code { background: var(--surface-2); border-radius: 3px; padding: 0 4px; font-si
   display: flex; justify-content: space-between;
   color: var(--muted); font-size: 0.65rem; margin-top: 0.25rem;
 }
+.strip-day { color: var(--muted); font-size: 0.65rem; margin: 0.3rem 0 0; }
 
 .inst-rates { margin: 0; }
 .inst-rates dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.75rem; margin: 0.45rem 0 0; }
@@ -350,9 +351,9 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem
   <div class="hero-copy">
     <p class="eyebrow">dsh plugin &middot; MIT &middot; not affiliated with DeepSeek</p>
     <h1>DeepSeek bills by the hour now. This is the meter for it.</h1>
-    <p class="lede">Two peak windows a day, off-peak at half the peak rate. Cost
-    stopped being a number you read afterwards and became <strong>a rate you are
-    standing in</strong>.</p>
+    <p class="lede">Two peak windows a weekday, off-peak at half the peak rate &mdash;
+    and since 22 August, off-peak all weekend. Cost stopped being a number you read
+    afterwards and became <strong>a rate you are standing in</strong>.</p>
     <p class="lede">One line under the dsh composer: what this session cost, which
     tariff is running, how long until it flips. Hover it for the tariff clock, the
     cache economics, and your balance.</p>
@@ -378,10 +379,11 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem
     <div class="inst-now">
       <div class="state">
         <span class="tariff" id="inst-tariff">off-peak</span>
-        <span class="flip" id="inst-flip">peak <b>01:00&ndash;04:00</b> and <b>06:00&ndash;10:00</b> UTC</span>
+        <span class="flip" id="inst-flip">peak <b>01:00&ndash;04:00</b> and <b>06:00&ndash;10:00</b> UTC, Mon&ndash;Fri</span>
       </div>
       <div class="strip" id="inst-strip"><!--{{STRIP}}--></div>
       <div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+      <p class="strip-day" id="inst-day">a weekday, in UTC &mdash; weekends bill off-peak all day</p>
     </div>
 
     <div class="inst-rates">
@@ -515,27 +517,55 @@ var el = function (id) { return document.getElementById(id) }
 var strip = el('inst-strip')
 var HOUR = 3600000
 
-/* The static strip is drawn in UTC, which is what a reader without JavaScript
- * gets. With JavaScript we redraw the same 24 published hours in the reader's
- * own day, by asking each local hour which UTC hour it lands on.
+/* The static strip is a weekday drawn in UTC, which is what a reader without
+ * JavaScript gets. With JavaScript we redraw the published schedule across the
+ * reader's own day, by asking each local hour where it lands on the vendor's
+ * clock.
+ *
+ * The schedule has had a day axis since the weekend rule took effect on
+ * 2026-08-22: Saturday and Sunday in Beijing bill off-peak for all 24 hours,
+ * so "which day is it" is now part of the answer and the row for a weekend is
+ * legitimately blank. The label under the strip says which day is drawn, so an
+ * empty strip reads as the news rather than as a broken widget.
  *
  * This reads tariffSchedule(), not tariffAt(): the strip is the published
  * schedule, not a record of today. tariffAt() answers "what would a request
  * sent at this instant be billed", which returns `flat` for any hour before
  * the 2026-08-16 switchover — correct for billing, wrong for a clock face. */
+var DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/* Local midnight of the day currently painted. The strip used to be the same
+ * 24 hours forever, so drawing it once at load was enough; now that Saturday
+ * and Sunday are their own shape, a page left open across midnight would keep
+ * showing yesterday's. */
+var drawnDay = null
+
 function drawStrip () {
   var schedule = tariffSchedule()
   var midnight = new Date()
   midnight.setHours(0, 0, 0, 0)
   var html = ''
+  var peakCells = 0
   for (var h = 0; h < 24; h++) {
-    var at = new Date(midnight.getTime() + h * HOUR)
-    var tariff = schedule[at.getUTCHours()]
+    /* Read both fields off one Beijing instant. Taking the weekday from the
+     * reader's calendar and the hour from the vendor's would disagree for the
+     * eight hours a day the two dates differ. */
+    var beijing = new Date(midnight.getTime() + h * HOUR + 8 * HOUR)
+    var tariff = schedule[beijing.getUTCDay()][beijing.getUTCHours()]
+    if (tariff === 'peak') peakCells++
     var label = (h < 10 ? '0' : '') + h + ':00 — ' + (tariff === 'peak' ? 'peak' : 'off-peak')
     html += '<span class="cell ' + tariff + '" title="' + label + '"></span>'
   }
   html += '<span class="now" id="inst-now"></span>'
   strip.innerHTML = html
+  drawnDay = midnight.getTime()
+
+  var day = el('inst-day')
+  if (day) {
+    day.textContent = peakCells === 0
+      ? DAY_NAMES[midnight.getDay()] + ' — off-peak all day'
+      : DAY_NAMES[midnight.getDay()] + ', your time'
+  }
 }
 
 var pad2 = function (n) { return (n < 10 ? '0' : '') + n }
@@ -596,10 +626,12 @@ function render () {
   el('rate-miss').textContent = money('miss')
   el('rate-out').textContent = money('out')
 
+  var midnight = new Date()
+  midnight.setHours(0, 0, 0, 0)
+  if (drawnDay !== midnight.getTime()) drawStrip()   /* the page was left open across midnight */
+
   var marker = el('inst-now')
   if (marker) {
-    var midnight = new Date()
-    midnight.setHours(0, 0, 0, 0)
     marker.style.left = ((now - midnight.getTime()) / (24 * HOUR) * 100).toFixed(3) + '%'
   }
 }

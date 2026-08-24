@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   CACHE_DISCOUNT, CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM,
-  bucketCostOf, costOf, formatCountdown, formatMoney, formatTokens,
-  nextTariffChange, tariffAt, tariffSchedule,
+  WEEKEND_OFFPEAK_FROM, bucketCostOf, costOf, formatCountdown, formatMoney,
+  formatTokens, isBeijingWeekend, nextTariffChange, tariffAt, tariffSchedule,
 } from '../lib/core.js'
 
 const utc = (year, month, day, hour, minute = 0) => Date.UTC(year, month - 1, day, hour, minute)
@@ -131,17 +131,92 @@ describe('nextTariffChange', () => {
 })
 
 describe('tariffSchedule', () => {
-  it('labels 24 hours from the published windows, independent of the switchover date', () => {
-    const day = tariffSchedule()
-    expect(day).toHaveLength(24)
-    expect(day.filter(hour => hour === 'peak')).toHaveLength(
-      PEAK_WINDOWS_UTC.reduce((total, [start, end]) => total + (end - start), 0),
-    )
-    expect(day[0]).toBe('offpeak')
-    expect(day[1]).toBe('peak')
-    expect(day[4]).toBe('offpeak')
-    expect(day[6]).toBe('peak')
-    expect(day[10]).toBe('offpeak')
+  const HOURS_PER_WEEKDAY = PEAK_WINDOWS_UTC.reduce((total, [start, end]) => total + (end - start), 0)
+
+  it('labels a full week, seven Beijing days of 24 hours', () => {
+    const week = tariffSchedule()
+    expect(week).toHaveLength(7)
+    for (const day of week) expect(day).toHaveLength(24)
+  })
+
+  it('gives each weekday the published windows, on Beijing hours', () => {
+    const week = tariffSchedule()
+    for (const weekday of [1, 2, 3, 4, 5]) {
+      const day = week[weekday]
+      expect(day.filter(hour => hour === 'peak')).toHaveLength(HOURS_PER_WEEKDAY)
+      // 01:00-04:00 and 06:00-10:00 UTC are 09:00-12:00 and 14:00-18:00 Beijing,
+      // which is how DeepSeek's Chinese page states them.
+      expect(day[8]).toBe('offpeak')
+      expect(day[9]).toBe('peak')
+      expect(day[12]).toBe('offpeak')
+      expect(day[14]).toBe('peak')
+      expect(day[18]).toBe('offpeak')
+    }
+  })
+
+  it('gives the weekend no peak hours at all', () => {
+    const week = tariffSchedule()
+    for (const weekday of [0, 6]) expect(week[weekday]).toEqual(Array(24).fill('offpeak'))
+    // 7 hours x 5 days. The @1 schedule implied 49, and billed 14 of them wrong.
+    expect(week.flat().filter(t => t === 'peak')).toHaveLength(HOURS_PER_WEEKDAY * 5)
+  })
+
+  it('agrees with tariffAt for every hour of a real week', () => {
+    // The grid is what the strip paints and tariffAt is what the ledger
+    // charges. This is the only test that stops those two drifting apart.
+    const monday = Date.UTC(2026, 7, 30, 16, 0, 0)   // Beijing Mon 2026-08-31 00:00
+    const week = tariffSchedule()
+    for (let hour = 0; hour < 168; hour++) {
+      const at = monday + hour * 3_600_000
+      const beijing = new Date(at + 8 * 3_600_000)
+      expect(week[beijing.getUTCDay()][beijing.getUTCHours()]).toBe(tariffAt(at))
+    }
+  })
+})
+
+describe('the weekend rule', () => {
+  it('bills a Saturday and a Sunday off-peak inside a peak window', () => {
+    // 2026-08-29 is a Saturday, 2026-08-30 a Sunday. 02:00 UTC is inside the
+    // first published window, so before the rule these billed peak.
+    expect(tariffAt(utc(2026, 8, 29, 2, 0))).toBe('offpeak')
+    expect(tariffAt(utc(2026, 8, 30, 2, 0))).toBe('offpeak')
+    expect(tariffAt(utc(2026, 8, 28, 2, 0))).toBe('peak')   // Friday
+    expect(tariffAt(utc(2026, 8, 31, 2, 0))).toBe('peak')   // Monday
+  })
+
+  it('turns the weekend over on the vendor clock, not on UTC', () => {
+    // The two instants that discriminate. Deleting the Beijing shift from
+    // tariffAt leaves every hour of the published windows labelled the same,
+    // because both windows close at 10:00 UTC, well before the 16:00 UTC point
+    // where a UTC date and a Beijing date start to disagree. Only these catch it.
+    expect(tariffAt(utc(2026, 8, 28, 16, 30))).toBe('offpeak')  // Friday UTC, already Saturday in Beijing
+    expect(tariffAt(utc(2026, 8, 30, 16, 30))).toBe('offpeak')  // Sunday UTC, already Monday in Beijing — but 00:30 Beijing is outside every window
+    // Same wall-clock hour one day earlier is a Beijing Friday: still a weekday.
+    expect(isBeijingWeekend(utc(2026, 8, 28, 16, 30))).toBe(true)
+    expect(isBeijingWeekend(utc(2026, 8, 28, 15, 30))).toBe(false)
+  })
+
+  it('does not reprice a weekend from before the rule took effect', () => {
+    // Sun 2026-08-17 and Sat 2026-08-22 billed peak, because the rule started
+    // at 16:00 UTC on 2026-08-22. A ledger that refunds them is inventing money.
+    expect(tariffAt(utc(2026, 8, 17, 2, 0))).toBe('peak')
+    expect(tariffAt(utc(2026, 8, 22, 2, 0))).toBe('peak')
+    // One second before and after the boundary, on a Beijing Sunday.
+    expect(tariffAt(WEEKEND_OFFPEAK_FROM - 1)).toBe('offpeak')  // 15:59 UTC Sat is outside every window anyway
+    expect(tariffAt(WEEKEND_OFFPEAK_FROM)).toBe('offpeak')
+    // The discriminating pair: consecutive Sundays either side of the boundary.
+    expect(tariffAt(utc(2026, 8, 23, 2, 0))).toBe('offpeak')   // Sun 2026-08-23 — first weekend under the rule
+
+  })
+
+  it('never counts down to a flip that will not happen', () => {
+    // Friday 23:00 UTC used to promise peak at Saturday 01:00 UTC.
+    const friday = utc(2026, 8, 28, 23, 0)
+    const change = nextTariffChange(friday)
+    expect(change.tariff).toBe('offpeak')
+    expect(change.next).toBe('peak')
+    // The real next peak is Monday 01:00 UTC, ~50 hours later.
+    expect(new Date(change.at).toISOString()).toBe('2026-08-31T01:00:00.000Z')
   })
 })
 

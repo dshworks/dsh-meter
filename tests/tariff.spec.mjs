@@ -8,9 +8,10 @@ import {
 const utc = (year, month, day, hour, minute = 0) => Date.UTC(year, month - 1, day, hour, minute)
 
 describe('the published rate card', () => {
-  it('carries both platforms of both models at all three tariffs', () => {
-    for (const model of ['deepseek-v4-flash', 'deepseek-v4-pro']) {
-      for (const tariff of ['flat', 'offpeak', 'peak']) {
+  it('carries both platforms of every model at every tariff it ever billed', () => {
+    for (const model of Object.keys(RATES)) {
+      // `flat` only for the models that existed before the switchover.
+      for (const tariff of Object.keys(RATES[model])) {
         for (const currency of ['usd', 'cny']) {
           const rate = RATES[model][tariff][currency]
           expect(rate.hit).toBeGreaterThan(0)
@@ -49,13 +50,22 @@ describe('the published rate card', () => {
   })
 
   it('makes every new rate higher than the flat rate it replaces', () => {
-    for (const model of Object.keys(RATES)) {
+    // A model that shipped after the switchover has no flat rate to replace --
+    // `deepseek-v4-flash-vision-exp` was published 2026-08-21, five days after
+    // time-of-use began, so `apply-pricing` writes it with no `flat` row at
+    // all. Skipping it here is the invariant; reading `.flat` unconditionally
+    // is what threw `Cannot read properties of undefined`.
+    for (const [model, byTariff] of Object.entries(RATES)) {
+      if (byTariff.flat === undefined) continue
       for (const currency of ['usd', 'cny']) {
         for (const bucket of ['hit', 'miss', 'out']) {
-          expect(RATES[model].offpeak[currency][bucket]).toBeGreaterThan(RATES[model].flat[currency][bucket])
+          expect(byTariff.offpeak[currency][bucket]).toBeGreaterThan(byTariff.flat[currency][bucket])
         }
       }
     }
+    // ...and at least one model still has one, so the loop cannot go empty
+    // and pass by doing nothing.
+    expect(Object.values(RATES).filter(byTariff => byTariff.flat !== undefined).length).toBeGreaterThan(0)
   })
 })
 

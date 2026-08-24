@@ -17,40 +17,45 @@ const row = (...cells) => `<tr>${cells.map(cell => `<td>${cell}</td>`).join('')}
 
 /** The published table's shape: rowspan labels, a spec section above the prices, a count below. */
 const EN_PAGE = table([
-  row('MODEL', 'deepseek-v4-flash', 'deepseek-v4-pro'),
+  row('MODEL', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'),
   row('CONTEXT LENGTH', '1M'),
   row('MAX OUTPUT', 'MAXIMUM: 384K'),
-  row('PRICING(1)', '1M INPUT TOKENS (CACHE HIT)', 'OFF-PEAK', '$0.007', '$0.022'),
-  row('PEAK', '$0.014', '$0.044'),
-  row('1M INPUT TOKENS (CACHE MISS)', 'OFF-PEAK', '$0.22', '$0.66'),
-  row('PEAK', '$0.44', '$1.32'),
-  row('1M OUTPUT TOKENS', 'OFF-PEAK', '$0.66', '$1.98'),
-  row('PEAK', '$1.32', '$3.96'),
-  row('Concurrency Limit(2)', '2500', '500'),
+  row('PRICING(1)', '1M INPUT TOKENS (CACHE HIT)', 'OFF-PEAK', '$0.007', '$0.007', '$0.022'),
+  row('PEAK', '$0.014', '$0.014', '$0.044'),
+  row('1M INPUT TOKENS (CACHE MISS)', 'OFF-PEAK', '$0.22', '$0.22', '$0.66'),
+  row('PEAK', '$0.44', '$0.44', '$1.32'),
+  row('1M OUTPUT TOKENS', 'OFF-PEAK', '$0.66', '$0.66', '$1.98'),
+  row('PEAK', '$1.32', '$1.32', '$3.96'),
+  row('Concurrency Limit(2)', '2500', '2500', '500'),
 ])
 
 const CN_PAGE = table([
-  row('模型', 'deepseek-v4-flash', 'deepseek-v4-pro'),
+  row('模型', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'),
   row('输出长度', '最大 384K'),
-  row('价格(1)', '百万tokens输入（缓存命中）', '空闲时段', '0.05元', '0.15元'),
-  row('高峰时段', '0.10元', '0.30元'),
-  row('百万tokens输入（缓存未命中）', '空闲时段', '1.5元', '4.5元'),
-  row('高峰时段', '3.0元', '9.0元'),
-  row('百万tokens输出', '空闲时段', '4.5元', '13.5元'),
-  row('高峰时段', '9.0元', '27.0元'),
-  row('并发限制(2)', '2500', '500'),
+  row('价格(1)', '百万tokens输入（缓存命中）', '空闲时段', '0.05元', '0.05元', '0.15元'),
+  row('高峰时段', '0.10元', '0.10元', '0.30元'),
+  row('百万tokens输入（缓存未命中）', '空闲时段', '1.5元', '1.5元', '4.5元'),
+  row('高峰时段', '3.0元', '3.0元', '9.0元'),
+  row('百万tokens输出', '空闲时段', '4.5元', '4.5元', '13.5元'),
+  row('高峰时段', '9.0元', '9.0元', '27.0元'),
+  row('并发限制(2)', '2500', '2500', '500'),
 ])
 
 describe('the table parser', () => {
-  it('reads both models at both tariffs from the English table', () => {
+  it('reads every model at both tariffs from the English table', () => {
     const { models, rates } = scrape(EN_PAGE)
-    expect(models).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro'])
+    expect(models).toEqual(['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'])
+    // The vision variant is priced identically to flash on both pages. Reading
+    // it from its own column rather than inheriting flash's is the point: the
+    // day the vendor separates them, this parser must already be looking.
+    expect(rates['deepseek-v4-flash-vision-exp'].peak).toEqual({ hit: 0.014, miss: 0.44, out: 1.32 })
     expect(rates['deepseek-v4-pro'].offpeak).toEqual({ hit: 0.022, miss: 0.66, out: 1.98 })
     expect(rates['deepseek-v4-flash'].peak).toEqual({ hit: 0.014, miss: 0.44, out: 1.32 })
   })
 
   it('reads the Chinese table, where prices carry a 元 suffix instead of a $ prefix', () => {
     const { rates } = scrape(CN_PAGE)
+    expect(rates['deepseek-v4-flash-vision-exp'].offpeak).toEqual({ hit: 0.05, miss: 1.5, out: 4.5 })
     expect(rates['deepseek-v4-pro'].offpeak).toEqual({ hit: 0.15, miss: 4.5, out: 13.5 })
     expect(rates['deepseek-v4-flash'].peak).toEqual({ hit: 0.1, miss: 3, out: 9 })
   })
@@ -77,10 +82,10 @@ describe('the table parser', () => {
 
   it('refuses a price row whose number count stops matching the model count', () => {
     const short = table([
-      row('MODEL', 'deepseek-v4-flash', 'deepseek-v4-pro'),
+      row('MODEL', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'),
       row('PRICING(1)', '1M OUTPUT TOKENS', 'OFF-PEAK', '$0.66'),
     ])
-    expect(() => scrape(short)).toThrow(/1 prices for 2 models/)
+    expect(() => scrape(short)).toThrow(/1 prices for 3 models/)
   })
 })
 

@@ -21,8 +21,12 @@ reaches npm.
 - **The peer range names both prerelease lines**
   (`^0.1.0-rc.6 || ^0.1.1-rc.1`). `^0.1.0-rc.6` did not match the installed
   `0.1.1-rc.2` at all: npm admits a prerelease only when some comparator
-  names the same `[major, minor, patch]`. The unmet peer was the one warning
-  that could have caught this, and it was pointed at the wrong thing.
+  names the same `[major, minor, patch]`. Correcting it buys documentation,
+  not an alarm — a profile resolves harness packages from the dsh
+  installation rather than its own tree, so `pnpm peers check` reports every
+  one of them as *missing* whatever the range says. Nothing in the install
+  path can currently tell you this plugin is talking to the wrong contract
+  version; only rendering it can.
 
 ### About 0.3.0 on npm
 

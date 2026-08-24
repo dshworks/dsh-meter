@@ -1,6 +1,6 @@
 {
   "schema": "dsh-meter/pricing@2",
-  "generator": "@dshworks/dsh-meter@0.3.1",
+  "generator": "@dshworks/dsh-meter@0.3.2",
   "homepage": "https://dsh.works/dsh-meter/",
   "source": {
     "usd": "https://api-docs.deepseek.com/quick_start/pricing",

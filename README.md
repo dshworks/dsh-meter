@@ -66,6 +66,36 @@ out in amber and the countdown runs to the next off-peak hour:
 | The same tokens priced under the other tariff | Before the switchover: what the new rates do to this session. After: what waiting for off-peak is worth |
 | What the cache saved | The counterfactual where every hit had been a miss |
 
+## Settings: the meter before you spend
+
+The line needs a session, and a session that has already billed something —
+so the one question this plugin exists to answer was unaskable until after
+you had paid to ask it. **Settings → Meter** answers it cold.
+
+<img src="https://raw.githubusercontent.com/dshworks/dsh-meter/main/docs/meter-settings.png" alt="The Meter section of dsh settings: the tariff running now with its countdown, a seven-day tariff grid, the published rate card, and the account balance" width="620">
+
+It is deliberately not a form. Both config knobs live in the plugin's own
+configuration, where the harness already edits plugin config; a second write
+path for two fields would be the settings-page reflex rather than the content.
+What is here is the instrument:
+
+| The section shows | Why it is there |
+|---|---|
+| The tariff running **now**, at full size, with the countdown and the clock time it ends | The reason to open the panel, answered before you read anything else |
+| **The week** — seven local days by twenty-four hours, peak in amber, a live now-marker | The card's strip answers "when does today change". Since weekends went off-peak this is a weekly question, and 35 amber cells out of 168 is the fastest way to see that peak is 35 hours a week, not 49 |
+| The published **rate card** in the currency your account is billed in | At the precision DeepSeek publishes it — `¥1.5`, not `¥1.50`. A rate is a quotation, not a total |
+| Your **balance** | Read once when the panel opens, through the same host route the card uses |
+
+The grid is laid out in your days, not Beijing's, and every cell asks the
+same function that prices a request — so the picture and the bill cannot
+disagree while still sparing you the timezone arithmetic.
+
+In Chinese the hour slots carry a small joke. Peak and valley — 峰 and 谷 —
+are the old words for time-of-use electricity, and the peak half is one
+character from the name of the man who founded the company selling the
+tokens. Hover a slot: 文峰, 文谷.
+
+
 ## Proof
 
 Live-verified against dsh `0.1.1-rc.2` on 2026-08-24, in a real web

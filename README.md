@@ -68,25 +68,28 @@ out in amber and the countdown runs to the next off-peak hour:
 
 ## Proof
 
-Live-verified against dsh `0.1.0-rc.6` on 2026-08-15, in a real web
-session on DeepSeek-V4-Pro — not a mock:
+Live-verified against dsh `0.1.1-rc.2` on 2026-08-24, in a real web
+session on DeepSeek-V4-Pro and V4-Flash — not a mock:
 
-> **Through `0.1.0-rc.8`, checked at the source rather than re-run.** The one
-> harness package this plugin reads, `@deepseek-ai/dsh-session-projection`, has
-> a byte-identical `src/` in rc.7 and rc.8, so the projection schema the fold
-> below is written against did not move. rc.8 does change the SQLite storage
-> format incompatibly — that is the store underneath the projection, not the
-> projection, and this plugin never touches it. The receipts in the table are
-> still rc.6 receipts; nobody has re-run them on rc.8.
+> **Re-run, because reading the source was not enough.** Through rc.8 this note
+> argued from a byte-identical `src/` that the projection contract had not
+> moved. It then moved: `0.1.1-rc.1` renamed `schema` to `stateSchema` and made
+> the client-visible `view` an optional `wire`. Because the registry reads the definition field by field and never
+> validates it, the old spelling did not fail — it silently meant *host-only*,
+> and the dock line rendered nothing on an otherwise healthy harness. A
+> contract that degrades to silence cannot be checked by diffing its source;
+> the table below is a fresh live run, not an argument.
 
 | Claim | How it was checked |
 |---|---|
-| Loads in a stock web profile | `dsh --profile web --dump-config` lists it; `/plugins/@dshworks/dsh-meter/client.js` serves 200 |
-| The readout is correct | 22.2K cache-miss input on v4-pro at the flat rate = ¥0.0665; the line and the card agree with the harness's own token counts |
-| Survives a restart | Server restarted, session reopened cold — the projection replays from the durable log at the same figure |
-| Both themes, both tariff states | Light and dark, flat and peak, captured above — this predates the 08-16 switchover, so the flat readout is one a new session no longer reaches |
-| Currency detection | A live account returns `{"currency":"cny", ...}` and the whole surface switches to ¥ with no configuration |
-| 50 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the balance reader, and the generated-bundle sync check |
+| Loads in a stock web profile | `dsh --profile web --dump-config` lists `@dshworks/dsh-meter`; `/plugins/@dshworks/dsh-meter/client.js` serves 200 |
+| The line renders | `¥0.2185 \| off-peak \| peak in 14h` under the composer, read out of the live DOM — the check that would have caught the rc.1 rename |
+| The readout is correct | 36.1K cache-miss input + 147 output across V4-Flash and V4-Pro = ¥0.2162 + ¥0.0023 = **¥0.2185**, matching the harness's own token counts on the stats line directly above it |
+| Survives a restart | Server restarted, an eight-day-old session reopened cold — the projection replays from the durable log at the same figure |
+| The card opens | Per-model split, the cache counterfactual (all-peak ¥0.2185 vs all-off-peak ¥0.1093), and the account balance, with no page errors |
+| Currency detection | A live account returns `{"currency":"cny", ...}` from `/dsh-meter/balance` and the whole surface switches to ¥ with no configuration |
+| Both themes, both tariff states | Light and dark, flat and peak, captured above on 2026-08-15 — that run predates the 08-16 switchover, so its flat readout is one a new session no longer reaches |
+| 98 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the balance reader, the registration contract against a stand-in registry of each era, and the generated-bundle sync check |
 
 ## Two currencies, no conversion
 

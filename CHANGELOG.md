@@ -1,8 +1,45 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-08-24
 
-The schedule grows a day axis, and the card grows a model.
+The meter is visible again, and everything main did since 0.2.4 finally
+reaches npm.
+
+- **The dock line came back.** `@deepseek-ai/dsh-session-projection`
+  0.1.1-rc.1 renamed the projection definition: `schema` became
+  `stateSchema`, and the top-level `view` moved into an **optional**
+  `wire: { viewSchema, view }`. The registry reads those fields one at a
+  time and never validates the definition it is handed, so the old spelling
+  did not fail — it read as *"this projection is host-only"*. The fold kept
+  running, the value never reached the browser, `useProjection('costMeter')`
+  returned undefined, and the line rendered nothing. No error, no warning,
+  no log line. A registration now carries both spellings, so one build is
+  correct on either side of the rename.
+- **`stateSchema` is new work, not a rename.** The old contract kept
+  checkpoints raw; the new one parses the persisted row before folding onto
+  it, so a definition without one throws on the first resumed session.
+- **The peer range names both prerelease lines**
+  (`^0.1.0-rc.6 || ^0.1.1-rc.1`). `^0.1.0-rc.6` did not match the installed
+  `0.1.1-rc.2` at all: npm admits a prerelease only when some comparator
+  names the same `[major, minor, patch]`. The unmet peer was the one warning
+  that could have caught this, and it was pointed at the wrong thing.
+
+### About 0.3.0 on npm
+
+**0.3.0 was published from a branch that never merged.** Its tag sits on a
+commit off the 0.2.4 release, and `main` went a different way for seven
+commits afterwards — so npm carried the pre-weekend rate card for a week:
+peak prices on days that bill off-peak, and `deepseek-v4-flash-vision-exp`
+metered at zero. Everything below shipped to `main` in that window and is
+reaching npm only now.
+
+**0.3.1 does not contain `savingMode`.** The system-prompt tariff nudge
+exists only in 0.3.0 and in its still-open PR (#3). Upgrading from 0.3.0
+keeps a `savingMode: true` config loading — unknown keys pass through — but
+the prompt section stops being contributed. Correct pricing was the urgent
+half; the nudge lands on its own merits.
+
+### The schedule grows a day axis, and the card grows a model
 
 - **Weekends bill off-peak all day**, from **2026-08-22 16:00 UTC** (00:00
   Beijing, Sunday 23 August). `tariffAt` read the hour and not the day, so
@@ -43,7 +80,7 @@ The schedule grows a day axis, and the card grows a model.
   only be silently wrong about it.
 
 
-The rate card stops being a private fact.
+### The rate card stops being a private fact
 
 - **`docs/pricing.json`**, served at
   <https://dsh.works/dsh-meter/pricing.json>. Static JSON, no key, no rate

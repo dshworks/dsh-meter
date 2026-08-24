@@ -19,14 +19,25 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { CACHE_DISCOUNT, CURRENCY_SYMBOL, RATES, tariffSchedule } from '../lib/core.js'
+import { CACHE_DISCOUNT, CURRENCY_SYMBOL, RATES, tariffAt } from '../lib/core.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+/**
+ * A reference weekday, well after the weekend rule took effect. The static
+ * strip has no reader clock and so cannot draw "today"; it draws the weekday
+ * shape, and the caption next to it carries the weekend. Wednesday is chosen
+ * because all 24 of its UTC hours fall on Beijing weekdays, so a UTC-labelled
+ * row is unambiguous.
+ */
+const REFERENCE_WEEKDAY = Date.UTC(2026, 7, 26)   // Wednesday 2026-08-26
+
 /** Same strip as the plugin's card, in UTC: what a reader with JavaScript off sees. */
-const strip = tariffSchedule()
-  .map((tariff, hour) => `<span class="cell ${tariff}" title="${String(hour).padStart(2, '0')}:00 UTC — ${tariff === 'peak' ? 'peak' : 'off-peak'}"></span>`)
-  .join('')
+const strip = Array.from({ length: 24 }, (_, hour) => {
+  const tariff = tariffAt(REFERENCE_WEEKDAY + hour * 3_600_000)
+  const label = `${String(hour).padStart(2, '0')}:00 UTC — ${tariff === 'peak' ? 'peak' : 'off-peak'}`
+  return `<span class="cell ${tariff}" title="${label}"></span>`
+}).join('')
 
 /** Both platforms' published rates, side by side, straight out of the card. */
 const rateRows = Object.entries(RATES)

@@ -30,8 +30,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
-  CACHE_DISCOUNT, CURRENCIES, CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES, TARIFFS,
-  TIME_OF_USE_FROM, tariffSchedule,
+  CACHE_DISCOUNT, CURRENCIES, CURRENCY_SYMBOL, PEAK_WINDOWS_BEIJING, PEAK_WINDOWS_UTC,
+  RATES, TARIFFS, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, tariffSchedule,
 } from '../lib/core.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -68,7 +68,7 @@ const ratesOf = (byTariff, tariffs) => Object.fromEntries(tariffs.map(tariff => 
 ]))
 
 const feed = {
-  schema: 'dsh-meter/pricing@1',
+  schema: 'dsh-meter/pricing@2',
   generator: `@dshworks/dsh-meter@${version}`,
   homepage: 'https://dsh.works/dsh-meter/',
   /* Two independently published tables. An account bills in exactly one of
@@ -85,9 +85,29 @@ const feed = {
     since: new Date(TIME_OF_USE_FROM).toISOString(),
     sinceEpochMs: TIME_OF_USE_FROM,
     peakWindowsUtc: PEAK_WINDOWS_UTC.map(([start, end]) => ({ startHourUtc: start, endHourUtc: end })),
-    /** 24 entries, index = UTC hour, so a consumer needs no window arithmetic. */
-    scheduleUtc: tariffSchedule(),
+    /**
+     * 7 rows of 24, indexed `[beijingWeekday][beijingHour]` — 0 is Sunday, as
+     * `Date.prototype.getUTCDay` numbers them. Both axes are on the vendor's
+     * clock so one Beijing instant supplies both indices.
+     *
+     * This replaced the flat 24-entry `scheduleUtc` of `@1`, which had no day
+     * axis and so labelled the whole weekend peak. The key was renamed rather
+     * than widened deliberately: a consumer still indexing by hour alone now
+     * gets `undefined` and fails, instead of quietly reading row 0 and being
+     * wrong by 2x for 14 hours a week.
+     */
+    scheduleBeijing: tariffSchedule(),
     offPeakIsHalfOfPeak: true,
+
+    /* The weekend rule, and the date it started — a ledger repricing a session
+     * from before it must still charge peak, because the account did. */
+    weekend: {
+      offPeakAllDay: true,
+      daysBeijing: [0, 6],
+      since: new Date(WEEKEND_OFFPEAK_FROM).toISOString(),
+      sinceEpochMs: WEEKEND_OFFPEAK_FROM,
+      note: 'Saturdays and Sundays on the Beijing clock bill off-peak for all 24 hours. Announced by DeepSeek only in the pricing-page footnote and only until it took effect; the live page now states the settled rule. The announcement survives at https://web.archive.org/web/20260822141620/https://api-docs.deepseek.com/quick_start/pricing/',
+    },
     note: 'A request is billed at the tariff in force when it was DISPATCHED, not when the answer completed. A long response that starts off-peak and finishes in a peak window bills off-peak.',
 
     /* The policy is written in Beijing time on DeepSeek's Chinese page and in
@@ -97,11 +117,18 @@ const feed = {
       utcOffsetHours: BEIJING_OFFSET_HOURS,
       observesDaylightSaving: false,
       peakWindowsBeijing: beijingWindows,
-      note: 'China has not observed daylight saving since 1991, so the UTC hours above are stable year-round and need no timezone database. peakWindowsBeijing is for display only — scheduleUtc is the machine-readable form.',
+      peakWindowHoursBeijing: PEAK_WINDOWS_BEIJING.map(([start, end]) => ({ startHour: start, endHour: end })),
+      note: 'China has not observed daylight saving since 1991, so the hours here are stable year-round and need no timezone database. peakWindowsBeijing is display text; scheduleBeijing is the machine-readable form. Both windows close at 18:00 Beijing, so neither crosses midnight and every window sits inside one weekday.',
     },
 
     /* The one way to misread this file. */
-    readingNow: 'tariff = scheduleUtc[new Date(dispatchedAtMs).getUTCHours()]. Index with UTC hours, NEVER local hours: scheduleUtc is not rotated into the reader\'s timezone. This file deliberately carries no current-time field, so a cached or vendored copy can never be stale about which tariff is running.',
+    readingNow: 'const beijing = new Date(dispatchedAtMs + 8 * 3600000); tariff = scheduleBeijing[beijing.getUTCDay()][beijing.getUTCHours()]. Take BOTH indices off that one shifted instant, and read them with the getUTC* accessors: the shift has already moved the fields to Beijing, and the reader\'s own weekday and the vendor\'s disagree for the eight hours from 16:00 UTC. Never index with local hours. This file deliberately carries no current-time field, so a cached or vendored copy can never be stale about which tariff is running.',
+
+    /* @1 published `scheduleUtc`, 24 entries with no day axis, so it read the
+     * weekend as peak. It is gone rather than deprecated: this feed exists to
+     * be vendored, and a wrong number left in place for a release is exactly
+     * the failure the file argues against elsewhere. */
+    changedInV2: 'scheduleUtc (24 entries, index = UTC hour) was replaced by scheduleBeijing (7 x 24, index = [beijingWeekday][beijingHour]) and the weekend block was added. A reader pinned to @1 was labelling Saturday and Sunday peak and so overstating those sessions by 2x from 2026-08-22T16:00:00Z.',
   },
 
   buckets: {

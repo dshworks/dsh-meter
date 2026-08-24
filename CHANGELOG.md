@@ -2,11 +2,52 @@
 
 ## Unreleased
 
+The schedule grows a day axis, and the card grows a model.
+
+- **Weekends bill off-peak all day**, from **2026-08-22 16:00 UTC** (00:00
+  Beijing, Sunday 23 August). `tariffAt` read the hour and not the day, so
+  the meter showed **peak for 14 hours a week that bill at half** — every
+  Saturday and Sunday inside the two windows, displayed at exactly 2x what
+  they cost. Peak is 35 hours a week, not 49. Reported in #11 by
+  [@xyzs996](https://github.com/xyzs996).
+- **The weekend is read on the vendor's clock.** DeepSeek wrote the rule as
+  "Saturdays and Sundays, **Beijing Time**", so the weekend turns over at
+  16:00 UTC, not midnight UTC. With today's windows the two readings label
+  all 168 hours identically — both windows close at 10:00 UTC, well before
+  the 16:00 UTC point where the dates diverge — so the tests pin the two
+  instants that *do* discriminate. The day a window moves past 16:00 UTC,
+  the UTC reading starts costing money and nothing else would have said so.
+- **The boundary is kept, not backdated.** A session dispatched in a peak
+  window on Sun 2026-08-17 or Sat 2026-08-22 genuinely billed peak.
+  Repricing those would refund money the account never got back — the same
+  reason `TIME_OF_USE_FROM` exists.
+- **Feed schema `dsh-meter/pricing@2`** (breaking). The 24-entry
+  `timeOfUse.scheduleUtc` is **replaced** by `timeOfUse.scheduleBeijing`, a
+  7x24 grid indexed `[beijingWeekday][beijingHour]`, plus a
+  `timeOfUse.weekend` block carrying the rule and the date it started. The
+  key was removed rather than widened on purpose: a reader that ignored a
+  new field would have stayed silently wrong, where a missing key throws.
+  `timeOfUse.changedInV2` states the migration inside the feed.
+- **`deepseek-v4-flash-vision-exp`** added to the card — shipped 2026-08-21,
+  priced identically to `deepseek-v4-flash` in both currencies, and until
+  now metered at **zero**. It has no `flat` row because it arrived after the
+  switchover, and `scripts/build-feed.mjs` assumed every model had one and
+  crashed on it, which is why the daily job could not land the fix itself.
+  Fixed in #10 by [@xyzs996](https://github.com/xyzs996).
+- **The drift alarm can now see the day axis.** `verify-pricing.mjs` captured
+  the footnote with `/Peak hours are ([^.]+)UTC/`, which stopped one
+  character before `, Monday through Friday` — so the check reported green
+  while the schedule was missing a whole dimension. It now reads the
+  weekday clause in both locales and calls its absence drift. A scraper that
+  extracts only the fields it already models cannot report a new one; it can
+  only be silently wrong about it.
+
+
 The rate card stops being a private fact.
 
 - **`docs/pricing.json`**, served at
   <https://dsh.works/dsh-meter/pricing.json>. Static JSON, no key, no rate
-  limit: both currencies, both live tariffs, the 24-hour UTC schedule, the
+  limit: both currencies, both live tariffs, the weekly schedule, the
   retired flat card with the date it stopped applying, and the definition
   of each billed bucket. Generated from `lib/core.js` by
   `scripts/build-feed.mjs` and checked by `pnpm test`, so the feed

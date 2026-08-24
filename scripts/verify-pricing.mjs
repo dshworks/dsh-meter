@@ -158,6 +158,38 @@ export function scrapeWindowsCn(html) {
   return pairWindows(utc, `"${sentence[1]}" (Beijing, converted at UTC+${BEIJING_OFFSET_HOURS})`)
 }
 
+/**
+ * Whether the footnote restricts peak to weekdays, per locale.
+ *
+ * This is its own check because it is the axis the old parser could not see.
+ * `/Peak hours are ([^.]+)UTC/` stopped its capture at `UTC`, and the live
+ * sentence puts `, Monday through Friday` immediately after it — so the clause
+ * that halves the schedule sat one character outside the capture and the daily
+ * run was green while the meter overcharged every weekend by 2x. The Chinese
+ * regex did capture 「周一至周五」, but only `(\d{1,2}):00` was ever read out of
+ * the match, so the words were discarded there too.
+ *
+ * The lesson generalises past this one clause: a scraper that extracts only
+ * the fields it already models cannot report a new dimension, it can only be
+ * silently wrong about it. So this reads the whole footnote sentence and
+ * asserts the shape it expects, rather than harvesting numbers out of it.
+ *
+ * @param {string} html - the English pricing page.
+ * @returns {boolean} true when peak is stated as weekdays-only.
+ */
+export function scrapeWeekdayOnly(html) {
+  const sentence = /Peak hours are ([^.]+?)\s*\(all other hours are off-peak\)/i.exec(text(html))
+  if (sentence === null) throw new Error('no "Peak hours are ... (all other hours are off-peak)" sentence on the page')
+  return /Monday\s+through\s+Friday|Mon\s*[-\u2013]\s*Fri|weekdays/i.test(sentence[1])
+}
+
+/** The same, off the Chinese footnote — checked separately, for the reason `scrapeWindowsCn` gives. */
+export function scrapeWeekdayOnlyCn(html) {
+  const sentence = /高峰时段为北京时间([^。]+)/.exec(text(html))
+  if (sentence === null) throw new Error('no "高峰时段为北京时间..." sentence on the page')
+  return /周一至周五|工作日/.test(sentence[1])
+}
+
 export const fetchPage = async (url) => {
   const response = await fetch(url, { headers: { accept: 'text/html' }, redirect: 'follow' })
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
@@ -223,6 +255,18 @@ async function main() {
       drift.push(`the two pages no longer agree on the schedule: English **${JSON.stringify(en)}** vs Beijing-converted **${JSON.stringify(cn)}** — the card holds ONE schedule for both platforms and would need one per currency`)
     }
     note(`checked peak windows: ${JSON.stringify(en)} UTC (English), ${JSON.stringify(cn)} UTC (Beijing page, converted)`)
+
+    /* The day axis. The card has held weekdays-only since 2026-08-22; if a
+     * page ever drops the clause, peak grows back by 14 hours a week and the
+     * meter would undercharge every weekend until someone noticed by hand. */
+    const enWeekday = scrapeWeekdayOnly(pages.usd)
+    const cnWeekday = scrapeWeekdayOnlyCn(pages.cny)
+    if (!enWeekday) drift.push('the English footnote no longer restricts peak to **Monday through Friday** — the card bills weekends off-peak all day and would now be undercharging them')
+    if (!cnWeekday) drift.push('the Chinese footnote no longer says **周一至周五** — the card bills weekends off-peak all day and would now be undercharging them')
+    if (enWeekday !== cnWeekday) {
+      drift.push(`the two pages no longer agree on the day axis: English weekdays-only **${enWeekday}** vs Beijing **${cnWeekday}** — the card holds ONE schedule for both platforms`)
+    }
+    note(`checked weekday restriction: ${enWeekday ? 'Mon-Fri' : 'ALL DAYS'} (English), ${cnWeekday ? '周一至周五' : '每天'} (Beijing page)`)
   } catch (error) {
     process.stderr.write(`verify-pricing: could not read the peak windows — ${error.message}\n`)
     process.exit(2)

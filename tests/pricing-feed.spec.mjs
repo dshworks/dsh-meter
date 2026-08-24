@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-import { PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM, tariffSchedule } from '../lib/core.js'
+import {
+  PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, tariffSchedule,
+} from '../lib/core.js'
+
+/** Read the weekend rows out of the feed itself, so the test cannot drift from what is published. */
+const weekend = { daysBeijingOf: feed => feed.timeOfUse.weekend.daysBeijing }
 
 /**
  * docs/pricing.json is published at a stable URL for other people's cost
@@ -14,7 +19,7 @@ const feed = JSON.parse(readFileSync(new URL('../docs/pricing.json', import.meta
 
 describe('the published pricing feed', () => {
   it('declares a schema version, so a consumer can refuse a shape it does not know', () => {
-    expect(feed.schema).toBe('dsh-meter/pricing@1')
+    expect(feed.schema).toBe('dsh-meter/pricing@2')
   })
 
   it('cites the page each currency came from', () => {
@@ -55,10 +60,42 @@ describe('the published pricing feed', () => {
   })
 
   it('carries the tariff clock, so a consumer needs no window arithmetic', () => {
-    expect(feed.timeOfUse.scheduleUtc).toEqual(tariffSchedule())
-    expect(feed.timeOfUse.scheduleUtc).toHaveLength(24)
+    expect(feed.timeOfUse.scheduleBeijing).toEqual(tariffSchedule())
+    expect(feed.timeOfUse.scheduleBeijing).toHaveLength(7)
+    for (const day of feed.timeOfUse.scheduleBeijing) expect(day).toHaveLength(24)
     expect(feed.timeOfUse.peakWindowsUtc.map(w => [w.startHourUtc, w.endHourUtc])).toEqual(PEAK_WINDOWS_UTC)
     expect(feed.timeOfUse.sinceEpochMs).toBe(TIME_OF_USE_FROM)
+  })
+
+  it('drops the day-blind @1 schedule rather than deprecating it', () => {
+    // A widened-but-kept `scheduleUtc` would let a reader that ignores the new
+    // field stay silently wrong. Removing the key turns that into a crash.
+    expect(feed.schema).toBe('dsh-meter/pricing@2')
+    expect(feed.timeOfUse.scheduleUtc).toBeUndefined()
+    expect(feed.timeOfUse.changedInV2).toMatch(/scheduleUtc/)
+  })
+
+  it('publishes the weekend rule with the date it started', () => {
+    const { weekend } = feed.timeOfUse
+    expect(weekend.offPeakAllDay).toBe(true)
+    expect(weekend.daysBeijing).toEqual([0, 6])
+    // The boundary is what keeps a ledger from refunding money the account
+    // never got back: a peak session on Sun 2026-08-17 really did bill peak.
+    expect(weekend.sinceEpochMs).toBe(WEEKEND_OFFPEAK_FROM)
+    expect(weekend.since).toBe('2026-08-22T16:00:00.000Z')
+    // DeepSeek never put this in the changelog, so the only citable source is
+    // the archived footnote. Losing that link loses the provenance entirely.
+    expect(weekend.note).toMatch(/web\.archive\.org/)
+  })
+
+  it('labels the weekend off-peak for all 24 hours, on both rows', () => {
+    for (const weekday of weekend.daysBeijingOf(feed)) {
+      expect(feed.timeOfUse.scheduleBeijing[weekday]).toEqual(Array(24).fill('offpeak'))
+    }
+    // And the weekdays must still carry the published peak hours, so an
+    // all-off-peak grid cannot pass this file.
+    const peakCells = feed.timeOfUse.scheduleBeijing.flat().filter(t => t === 'peak')
+    expect(peakCells).toHaveLength(35)
   })
 
   it('states the Beijing anchor that makes a UTC schedule safe to publish', () => {
@@ -80,7 +117,11 @@ describe('the published pricing feed', () => {
     // UTC-indexed schedule with local hours returns a plausible tariff that is
     // wrong by 2x for most of the world.
     expect(feed.timeOfUse.readingNow).toMatch(/getUTCHours/)
-    expect(feed.timeOfUse.readingNow).toMatch(/NEVER local hours/)
+    expect(feed.timeOfUse.readingNow).toMatch(/getUTCDay/)
+    expect(feed.timeOfUse.readingNow).toMatch(/[Nn]ever index with local hours/)
+    // Both indices must come off the same shifted instant. Mixing the reader's
+    // weekday with the vendor's hour is wrong for eight hours of every day.
+    expect(feed.timeOfUse.readingNow).toMatch(/BOTH indices/)
     // And no field may claim to know what time it is — a cached copy would lie.
     for (const key of ['now', 'currentTariff', 'asOf', 'generatedAt']) {
       expect(feed.timeOfUse[key]).toBeUndefined()

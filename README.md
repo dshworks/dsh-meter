@@ -8,9 +8,9 @@ English | [中文](README.zh.md)
 
 ### DeepSeek bills by time of day now. This is the meter for it.
 
-Two peak windows a day, off-peak at half the peak rate. Cost stopped
-being a number you read afterwards and became **a rate you are standing
-in**.
+Two peak windows a weekday, off-peak at half the peak rate — and since
+22 August, off-peak all weekend. Cost stopped being a number you read
+afterwards and became **a rate you are standing in**.
 
 One line under the composer: what this session cost, which tariff is
 running, how long until it flips. Hover it for the tariff clock, the
@@ -60,7 +60,7 @@ out in amber and the countdown runs to the next off-peak hour:
 | The card shows | Why it is there |
 |---|---|
 | The session total, request count, models | The number, once, at full size |
-| A 24-hour tariff strip in **your** local time, with a live now-marker | Peak windows are published in UTC. Reading them off a strip beats doing timezone arithmetic at 11pm |
+| A 24-hour tariff strip in **your** local time, with a live now-marker | Peak windows are published in UTC and restricted to Beijing weekdays. Reading them off a strip beats doing timezone arithmetic at 11pm — and on a weekend the strip is empty, which is the answer |
 | cache hits / fresh input / output — tokens and money on each | A cache hit costs **1/30th** of a miss. This is the row that shows whether your prompt prefix is stable |
 | Your account balance, and how much of it is granted credit | Granted balance expires; topped-up balance does not |
 | The same tokens priced under the other tariff | Before the switchover: what the new rates do to this session. After: what waiting for off-peak is worth |
@@ -115,13 +115,29 @@ Carried verbatim in [`lib/core.js`](lib/core.js), per 1M tokens.
 |---|---|---|---|
 | **v4-flash** off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
 | v4-flash peak | $0.014 / ¥0.10 | $0.44 / ¥3 | $1.32 / ¥9 |
+| **v4-flash-vision-exp** off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
+| v4-flash-vision-exp peak | $0.014 / ¥0.10 | $0.44 / ¥3 | $1.32 / ¥9 |
 | **v4-pro** off-peak | $0.022 / ¥0.15 | $0.66 / ¥4.5 | $1.98 / ¥13.5 |
 | v4-pro peak | $0.044 / ¥0.30 | $1.32 / ¥9 | $3.96 / ¥27 |
 
-Peak is **01:00–04:00 and 06:00–10:00 UTC** (09:00–12:00 and 14:00–18:00
-Beijing). Every other hour is off-peak, including the two-hour gap
-between the windows. Off-peak is exactly half of peak — and still above
-the flat rate it replaced, by about 2.3x on output.
+Peak is **01:00–04:00 and 06:00–10:00 UTC, Monday to Friday**
+(09:00–12:00 and 14:00–18:00 Beijing). Every other hour is off-peak,
+including the two-hour gap between the windows and the whole weekend.
+Off-peak is exactly half of peak — and still above the flat rate it
+replaced, by about 2.3x on output.
+
+`deepseek-v4-flash-vision-exp` shipped 2026-08-21 and bills at exactly
+the v4-flash rates in both currencies. Images are converted to tokens by
+their dimensions and billed as input. It has no flat row: it arrived
+after the switchover, so it has no pre-time-of-use history to reprice.
+
+**Weekends have been off-peak all day since 2026-08-22 16:00 UTC**
+(00:00 Beijing, Sunday 23 August), on the *Beijing* calendar — so the
+weekend turns over at 16:00 UTC, not at midnight UTC. Peak is 35 hours a
+week, not 49. DeepSeek announced this only in the pricing-page footnote
+and only until it took effect; the live page now states just the settled
+rule, so the announcement survives at
+[the archived page](https://web.archive.org/web/20260822141620/https://api-docs.deepseek.com/quick_start/pricing/).
 
 <details>
 <summary>The retired flat card, kept to reprice history</summary>
@@ -155,7 +171,7 @@ https://dsh.works/dsh-meter/pricing.json
 ```
 
 Static JSON, no key, no rate limit. Both currencies, both tariffs, the
-UTC schedule, the retired flat card for repricing history, and the
+weekly schedule, the retired flat card for repricing history, and the
 bucket definitions — generated from [`lib/core.js`](lib/core.js) by
 [`scripts/build-feed.mjs`](scripts/build-feed.mjs), so it cannot
 state a price the meter would not charge.
@@ -176,31 +192,44 @@ reprices at the tariff it was actually billed under.
 ### What does it cost right now?
 
 The feed answers this **without containing a "now"**. It publishes the
-24-hour schedule; you index it with the current UTC hour. That is why a
-CDN can cache it for ten minutes, or you can vendor it into a binary,
-and it still cannot be stale about which tariff is running:
+week as a grid; you index it with the current Beijing weekday and hour.
+That is why a CDN can cache it for ten minutes, or you can vendor it
+into a binary, and it still cannot be stale about which tariff is
+running:
 
 ```sh
 curl -s https://dsh.works/dsh-meter/pricing.json | jq -r '
-  (now|gmtime|.[3]) as $h
-  | .timeOfUse.scheduleUtc[$h] as $t
+  ((now + 8*3600) | gmtime) as $b
+  | .timeOfUse.scheduleBeijing[$b[6]][$b[3]] as $t
   | "\($t) · v4-pro out $\(.models["deepseek-v4-pro"].rates[$t].usd.out)/1M"'
 ```
 
-An endpoint that returned the answer instead would be wrong for as long
-as its cache lives, four times a day, on exactly the boundary where
-being wrong costs 2x.
+Shift by `8*3600` first, then break down **once**, and take both indices
+off that same result: `$b[6]` is the day of week (0 = Sunday, as in
+JavaScript) and `$b[3]` the hour. An endpoint that returned the answer
+instead would be wrong for as long as its cache lives, on exactly the
+boundary where being wrong costs 2x.
 
-**Two ways to get this wrong, both silent:**
+**Three ways to get this wrong, all silent:**
 
-- **Local hours.** `scheduleUtc` is indexed by UTC hour and is not
-  rotated into your timezone. `new Date().getHours()` returns a
-  plausible tariff that is wrong for most of the planet.
+- **Local hours.** `scheduleBeijing` is indexed on the vendor's clock
+  and is not rotated into your timezone. `new Date().getHours()` returns
+  a plausible tariff that is wrong for most of the planet.
+- **Mixing the two clocks.** Taking the weekday from your own calendar
+  and the hour from Beijing's disagrees for the eight hours from 16:00
+  UTC, when Beijing is already on the next day. Derive both from one
+  shifted instant.
 - **Broken-down time offsets.** jq's `gmtime` is
-  `[year, month, day, hour, …]` — the hour is `.[3]`. Writing `.[2]`
-  reads the day of the month, which is a valid index into a 24-hour
-  array. Testing this section at 09:59 UTC, `.[2]` said `offpeak` while
-  the real tariff was `peak`. It looked completely reasonable.
+  `[year, month, day, hour, minute, second, weekday, yearday]` — the
+  hour is `.[3]` and the weekday `.[6]`. Writing `.[2]` reads the day of
+  the month, which is a valid index into a 24-hour array. Testing this
+  section at 09:59 UTC, `.[2]` said `offpeak` while the real tariff was
+  `peak`. It looked completely reasonable.
+
+Reading `@1`'s `scheduleUtc` now returns `null`: the key was removed
+rather than deprecated, because a reader that kept using it would have
+gone on labelling every weekend peak and overstating those sessions by
+2x. See `timeOfUse.changedInV2` in the feed.
 
 The schedule is anchored to Beijing (UTC+8), and China has not observed
 daylight saving since 1991 — that fixed offset is the only reason a
@@ -226,7 +255,7 @@ card as current:
 On cached input, the bucket an agent sends most of, models.dev is off by
 **12x at peak**. And this is not a staleness bug they can patch: both
 schemas hold one flat price per model per bucket, with nowhere to put a
-tariff. A number that is wrong for seven hours of every UTC day cannot be
+tariff. A number that is wrong for seven hours of every weekday cannot be
 represented correctly in either.
 
 OpenRouter's `/api/v1/models` is accurate, but for a different question —

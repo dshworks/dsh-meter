@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { scrape, scrapeWindows, scrapeWindowsCn } from '../scripts/verify-pricing.mjs'
+import {
+  scrape, scrapeWeekdayOnly, scrapeWeekdayOnlyCn, scrapeWindows, scrapeWindowsCn,
+} from '../scripts/verify-pricing.mjs'
 
 /**
  * The drift alarm's parsing half, against synthetic pages.
@@ -117,5 +119,47 @@ describe('the peak-window footnotes', () => {
     expect(() => scrapeWindows('<p>nothing here</p>')).toThrow(/Peak hours are/)
     expect(() => scrapeWindowsCn('<p>nothing here</p>')).toThrow(/高峰时段/)
     expect(() => scrapeWindowsCn('<p>高峰时段为北京时间 9:00（其余为空闲时段）。</p>')).toThrow(/unpaired/)
+  })
+})
+
+describe('the weekday clause', () => {
+  /* Verbatim from the live pages on 2026-08-23. The clause sits immediately
+   * after `UTC`, which is exactly where the previous `/Peak hours are ([^.]+)UTC/`
+   * capture stopped — so these two strings are the regression. */
+  const LIVE_EN = '<p>(1) Off-peak rates are half of the peak rates. Peak hours are 01:00 - 04:00 and 06:00 - 10:00 UTC, Monday through Friday (all other hours are off-peak).</p>'
+  const LIVE_CN = '<p>(1) 空闲时段价格为高峰时段价格的一半。高峰时段为北京时间周一至周五 9:00 - 12:00、14:00 - 18:00（其余为空闲时段）。</p>'
+
+  /* And verbatim from the page as it read until 2026-08-22 — the shape the
+   * alarm must now call drift rather than pass. */
+  const OLD_EN = '<p>(1) Off-peak rates are half of the peak rates. Peak hours are 01:00 - 04:00 and 06:00 - 10:00 UTC (all other hours are off-peak).</p>'
+  const OLD_CN = '<p>(1) 空闲时段价格为高峰时段价格的一半。高峰时段为北京时间 9:00 - 12:00、14:00 - 18:00（其余为空闲时段）。</p>'
+
+  it('reads the restriction off the live footnote, in both locales', () => {
+    expect(scrapeWeekdayOnly(LIVE_EN)).toBe(true)
+    expect(scrapeWeekdayOnlyCn(LIVE_CN)).toBe(true)
+  })
+
+  it('calls the pre-2026-08-22 footnote what it was: no restriction', () => {
+    // The bug this whole check exists for. The old parser returned the same
+    // [[1,4],[6,10]] for both of these and reported green either way.
+    expect(scrapeWeekdayOnly(OLD_EN)).toBe(false)
+    expect(scrapeWeekdayOnlyCn(OLD_CN)).toBe(false)
+  })
+
+  it('still reads the windows correctly out of the sentence that carries the clause', () => {
+    // The clause must not break the number parse it sits next to.
+    expect(scrapeWindows(LIVE_EN)).toEqual([[1, 4], [6, 10]])
+    expect(scrapeWindowsCn(LIVE_CN)).toEqual([[1, 4], [6, 10]])
+  })
+
+  it('accepts the other ways a vendor might write it', () => {
+    expect(scrapeWeekdayOnly('<p>Peak hours are 01:00 - 04:00 UTC on weekdays (all other hours are off-peak).</p>')).toBe(true)
+    expect(scrapeWeekdayOnly('<p>Peak hours are 01:00 - 04:00 UTC, Mon-Fri (all other hours are off-peak).</p>')).toBe(true)
+    expect(scrapeWeekdayOnlyCn('<p>高峰时段为北京时间工作日 9:00 - 12:00（其余为空闲时段）。</p>')).toBe(true)
+  })
+
+  it('refuses a page whose footnote it cannot find, rather than guessing', () => {
+    expect(() => scrapeWeekdayOnly('<p>nothing here</p>')).toThrow(/Peak hours are/)
+    expect(() => scrapeWeekdayOnlyCn('<p>nothing here</p>')).toThrow(/高峰时段/)
   })
 })

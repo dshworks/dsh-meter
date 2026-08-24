@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.3.2 — 2026-08-24
+
+The meter stops requiring a session, and the tariff strip starts working
+again.
+
+### Settings > Meter
+
+- **The instrument, before you spend anything.** The dock line needs a
+  session that has already billed a request, so the question this plugin
+  exists to answer — what does an hour cost, and when is it cheap — could
+  not be asked until after you had paid to ask it. The new settings section
+  answers it cold: the tariff running now with its countdown, a seven-day
+  tariff grid, the published rate card in your account's currency, and the
+  balance.
+- **Not a form.** Both config knobs already live in the plugin's own
+  configuration, which the harness knows how to edit; a second write path
+  for two fields would be the settings-page reflex rather than the content.
+  The section holds no controls on purpose.
+- **The week, not the day.** The card's 24-hour strip answers "when does
+  today change". Weekends going off-peak made that a weekly question, and
+  35 amber cells out of 168 is the fastest way to see that peak is 35 hours
+  a week rather than 49. Laid out in the reader's local days rather than
+  Beijing's, with every cell asking `tariffAt` for its own instant, so the
+  picture cannot drift from the bill and nobody has to convert timezones at
+  23:00.
+- **Rates print as published.** `formatRate` renders the card at DeepSeek's
+  own precision — `¥1.5`, not `¥1.50`. `formatMoney` pads a computed total
+  so a column of session costs lines up and a sub-cent figure survives; a
+  rate is a quotation, and padding it put `¥0.0500` next to `¥1.50` and two
+  decimal conventions in one column.
+- **An easter egg in Chinese.** 峰 and 谷 — peak and valley — are the old
+  words for time-of-use electricity, and the peak half is one character from
+  the name of the man who founded the company selling the tokens. Hovering
+  an hour slot in zh-Hans reads 文峰 / 文谷. English keeps peak / off-peak.
+  It lives in the locale dictionaries rather than a language test, so the
+  surface never asks what language it is in.
+
+### The tariff strip was drawing a lie
+
+- **Every cell had read `undefined` since the weekend fix.** `tariffSchedule`
+  grew a day axis in 0.3.1 — 24 entries became a 7x24 grid — and its only
+  consumer went on indexing it by UTC hour. Hours 0-6 got back a whole row
+  object, the rest got `undefined`, and neither is `'peak'`, so the card
+  drew a flat off-peak day on a Tuesday afternoon. No throw, no warning: a
+  wrong picture is the only symptom a schedule bug has, and 0.3.1 shipped
+  with it.
+- **The reading is gone, not repaired.** Each cell now asks `tariffAt` for
+  its own instant, which is what the schedule's own docstring recommends and
+  leaves no index to mistranslate. `localMidnight`, `localTariffDays` and
+  `localWeekStart` moved into `lib/core.js` so the clock logic sits where
+  the test suite can reach it — it was in the browser half, which nothing
+  tested.
+- **Tests that fail on the old reading.** Seven of them, asserting what a
+  cell *holds* rather than that a call returns: a test checking only
+  `length === 24` passed throughout the outage, and one is kept here to say
+  so. Plus dictionary parity — a key present in `en` and missing from `zh`
+  does not fail, it silently half-translates. 116 tests.
+
 ## 0.3.1 — 2026-08-24
 
 The meter is visible again, and everything main did since 0.2.4 finally

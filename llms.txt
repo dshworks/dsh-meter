@@ -49,7 +49,7 @@ DeepSeek's own pages and opens an issue on any disagreement.
 - [lib/core.js](lib/core.js): the published rate card, the tariff clock, and the pure session-log fold — the single source of both halves
 - [lib/balance.js](lib/balance.js): the TTL-cached `GET /user/balance` reader and its error taxonomy
 - [lib/index.js](lib/index.js): host plugin — registers the `costMeter` session projection and the `/dsh-meter/balance` route
-- [src/ui.js](src/ui.js): browser surface — the composer-dock line, the hover card, and the locale dictionaries
+- [src/ui.js](src/ui.js): browser surface — the composer-dock line, the hover card, the Settings > Meter section, and the locale dictionaries
 - [scripts/build-client.mjs](scripts/build-client.mjs): inlines core + ui into `lib/client.js`, the bundle dsh serves; `--check` fails when stale
 - [scripts/build-site.mjs](scripts/build-site.mjs): inlines core into `docs/index.html`, the GitHub Pages site; renders its schedule strip and rate table from the same exports
 - [scripts/build-feed.mjs](scripts/build-feed.mjs): renders the card into `docs/pricing.json`, the published feed; `--check` fails when stale

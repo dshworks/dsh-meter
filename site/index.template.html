@@ -195,6 +195,9 @@ code { background: var(--surface-2); border-radius: 3px; padding: 0 4px; font-si
   font-size: 0.85rem; white-space: pre;
 }
 .cmd .p { color: var(--pink); }
+/* The one value in a config block a reader has to change. Cyan is this page's
+ * "the moving part" colour everywhere else; it means the same thing here. */
+.cmd .on { color: var(--cyan); }
 
 /* ---------- the instrument ---------- */
 
@@ -335,6 +338,7 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem
         <a href="#install">install</a>
         <a href="#proof">proof</a>
         <a href="#rates">rates</a>
+        <a href="#saving">saving mode</a>
         <a href="https://dsh.works/awesome-dsh-plugins/">registry</a>
         <a href="https://github.com/dshworks/dsh-meter">github&nbsp;&#8599;</a>
       </nav>
@@ -487,6 +491,39 @@ off entirely &mdash; the meter keeps working.</p>
 <p class="fine">Full documentation, configuration keys and known limitations live in
 the <a href="https://github.com/dshworks/dsh-meter#readme">README</a>
 (<a href="https://github.com/dshworks/dsh-meter/blob/main/README.zh.md">中文</a>).</p>
+
+<h2 id="saving">Saving mode &mdash; let the meter talk back</h2>
+
+<p>Everything above is a readout: the meter watches, and the model never hears
+from it. That is the default and it stays the default. But a number nobody acts
+on is a number that saved nothing, so since 0.4.0 you can hand the reading to
+the agent:</p>
+
+<div class="cmd"><span class="p">#</span> cordis.patch.yml
+<span class="p">-</span> id: dsh-meter
+    config:
+      savingMode: <span class="on">true</span></div>
+
+<p>One system-prompt section, <code>meter:tariff</code>, evaluated at every
+assembly. Inside a peak window it tells the model the hours, that every token
+bills at twice the off-peak rate, and asks it to answer concisely, prefer the
+context it already has over new tool calls, and offer to defer expensive work
+until the window closes. Outside one it says <strong>nothing at all</strong>
+&mdash; an empty section renders to nothing, so silence costs zero tokens.</p>
+
+<p class="note"><strong>It reads the same clock as the bill.</strong> The tariff
+comes from the same function the billing fold uses, at assembly time, so the
+nudge and the invoice can never disagree about which side of a boundary the next
+request lands on. Weekends bill off-peak for all 24 hours, so they get no nudge
+&mdash; asking a model to spend less on a day that is already half price would
+be a plugin lying to it about money.</p>
+
+<p class="fine">The text is byte-identical inside a tariff window, on purpose: a
+live countdown in the system prompt would roll the session's prompt-prefix cache
+every minute, which is the most expensive way to save money this plugin can think
+of. It flips at tariff boundaries and then holds. And it is a nudge, not a
+throttle &mdash; nothing is enforced at the request layer. Write your own text
+with <code>savingPeakPrompt</code> and <code>savingOffPeakPrompt</code>.</p>
 
 </div>
 </main>

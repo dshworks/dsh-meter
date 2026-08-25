@@ -119,7 +119,7 @@ session on DeepSeek-V4-Pro and V4-Flash — not a mock:
 | The card opens | Per-model split, the cache counterfactual (all-peak ¥0.2185 vs all-off-peak ¥0.1093), and the account balance, with no page errors |
 | Currency detection | A live account returns `{"currency":"cny", ...}` from `/dsh-meter/balance` and the whole surface switches to ¥ with no configuration |
 | Both themes, both tariff states | Light and dark, flat and peak, captured above on 2026-08-15 — that run predates the 08-16 switchover, so its flat readout is one a new session no longer reaches |
-| 98 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the balance reader, the registration contract against a stand-in registry of each era, and the generated-bundle sync check |
+| 130 tests, CI green | `pnpm test` — the fold, the tariff clock, the rate card, the saving-mode nudge, the balance reader, the registration contract against a stand-in registry of each era, and the generated-bundle sync check |
 
 ## Two currencies, no conversion
 
@@ -343,13 +343,20 @@ the argument for taking the keyboard away from all of us.
 
 ## Model Experience
 
-None. `dsh-meter` adds no tool, no system-prompt section, no message, and
-no model call; it does not touch the request. Cost belongs to the person
-paying, not to the agent's context window.
+None by default. `dsh-meter` adds no tool, no system-prompt section, no
+message, and no model call; it does not touch the request. Cost belongs
+to the person paying, not to the agent's context window. The one opt-in
+exception is [saving mode](#saving-mode--the-meter-talks-back)
+(`savingMode: true`): one system-prompt section that names the tariff in
+force, absent entirely when its text renders empty.
 
 #### KV Cache effect
 
-None — the plugin never participates in a request.
+None by default. In saving mode, the `meter:tariff` section's text is
+byte-identical inside a tariff window, so the prompt prefix — and its
+cache — hold from one request to the next; the section changes only at
+the tariff boundaries, so the first request after a flip misses the
+prefix cache, and then holds again.
 
 ## Configuration
 
@@ -361,6 +368,7 @@ Everything below is a validated config field, set in your profile's
   config:
     currency: cny        # pin a rate card instead of detecting it
     balance: false       # never call /user/balance
+    savingMode: true     # tell the model which tariff it is standing in
 ```
 
 | Key | Default | Meaning |
@@ -371,6 +379,47 @@ Everything below is a validated config field, set in your profile's
 | `baseUrl` | `https://api.deepseek.com` | Origin the balance is read from |
 | `balanceTtlMs` | `300000` | Minimum age before a card opening refetches the balance |
 | `balanceTimeoutMs` | `4000` | Per-request timeout for the balance read |
+| `savingMode` | `false` | Contribute a system-prompt section naming the tariff in force, so the model can behave accordingly |
+| `savingPeakPrompt` | the built-in nudge | Text injected while a peak window runs |
+| `savingOffPeakPrompt` | `''` | Text injected while no peak window runs; empty (the default) means the section renders to nothing and costs zero prompt tokens |
+
+## Saving mode — the meter talks back
+
+Off by default, because a readout should never grow into the agent's
+context window on its own. Flip `savingMode: true` and the meter stops
+being a bystander: at every assembly it contributes one system-prompt
+section, `meter:tariff`, that tells the model which tariff the *next*
+request will be dispatched under and how to behave in it.
+
+Inside a peak window the section carries `savingPeakPrompt` — by default
+the meter's own nudge: the peak hours are named, the doubling of the
+bill is stated, and the model is asked to answer concisely, prefer
+context it already has over new tool calls, and offer to defer expensive
+work until the window closes. Outside the windows the section renders
+`savingOffPeakPrompt`; empty by default, so the meter's voice costs
+**zero tokens** when there is nothing to warn about. Want the model to
+loosen up off-peak instead? Set `savingOffPeakPrompt` to something like
+*"off-peak, the half-price hours are running — you may be liberal with
+tokens"*.
+
+Four properties are deliberate:
+
+- **The tariff is read at assembly time, from the same clock the billing
+  fold uses.** The nudge and the bill can never disagree about which side
+  of a boundary the next request lands on — including weekends, which
+  bill off-peak all day and therefore get no nudge at all.
+- **The hours in the nudge are derived, not typed.** `peakHoursPhrase()`
+  reads them off `PEAK_WINDOWS_UTC` and `tariffSchedule()`, so a schedule
+  change rewrites the sentence. A prompt that tells a model the wrong
+  peak hours is a plugin lying to it about money.
+- **The text is constant inside a tariff window.** A countdown in here
+  would change every minute and roll the session's prompt-prefix cache
+  for one sentence's sake — the most expensive way to save money this
+  plugin can think of. The section flips only at tariff boundaries
+  (first request after a flip misses the prefix cache), and then holds.
+- **It is a nudge, not a throttle.** The model may ignore it; nothing is
+  enforced at the request layer. If you need a hard cap, that is a
+  different plugin.
 
 ## Development
 

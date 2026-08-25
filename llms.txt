@@ -4,7 +4,10 @@
 > under DeepSeek's time-of-use pricing: one line in the composer dock with
 > the session total, the tariff in force, and the countdown to the next
 > change, plus a hover card with a local-time tariff clock, the
-> cache/input/output split, and the account balance.
+> cache/input/output split, and the account balance. Optional saving mode
+> (`savingMode: true`) adds one system-prompt section that tells the model
+> which tariff it is standing in and asks for economical behavior during
+> peak windows.
 
 The rate card is written by machine and reviewed by human: a daily job scrapes
 both of DeepSeek's pricing pages, rewrites `lib/core.js` from them, regenerates

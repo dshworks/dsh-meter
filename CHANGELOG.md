@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.0 - 2026-08-25
+
+### Added
+
+- **Saving mode** (`savingMode`, off by default). One system-prompt section,
+  `meter:tariff`, evaluated at every assembly, telling the model which tariff
+  the *next* request will be dispatched under and asking for economical
+  behaviour inside a peak window. The meter's first model-visible contribution
+  in its life, and it stays opt-in: the repo's "keep the model surface empty"
+  rule is now "empty by default".
+  - The tariff comes from `tariffAt()` at assembly time — the same function and
+    clock the billing fold uses — so the nudge and the bill cannot disagree
+    about which side of a boundary the next request lands on. Weekends bill
+    off-peak all day, so they get no nudge.
+  - The text is byte-identical inside a tariff window. A countdown would change
+    every minute and roll the session's prompt-prefix cache, which is the most
+    expensive way to save money a cost plugin can think of.
+  - Outside a peak window the section renders `savingOffPeakPrompt`, empty by
+    default, and an empty section renders to nothing: zero prompt tokens when
+    there is nothing to warn about.
+  - `savingPeakPrompt` and `savingOffPeakPrompt` override both texts.
+- `peakHoursPhrase()` — how the current schedule spells its peak hours, read
+  off `PEAK_WINDOWS_UTC` and `tariffSchedule()`. The built-in nudge is built
+  from it rather than typed, so a schedule change rewrites the sentence. This
+  is the failure a sibling project shipped in August: the weekend rule reached
+  the table and not the prose, and the prose went on saying peak ran daily.
+- `tests/prompt-contract.spec.mjs` — the registration driven through a stand-in
+  `systemPrompt` that reads exactly the fields the published registry reads.
+  The projection registry renamed its fields in 0.1.1-rc.1 and the dock line
+  went blank with no error; a prompt section fails more quietly still, because
+  nothing on screen changes when the model simply never hears about the tariff.
+
 ## 0.3.2 — 2026-08-24
 
 The meter stops requiring a session, and the tariff strip starts working

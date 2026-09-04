@@ -1,6 +1,6 @@
 {
   "name": "@dshworks/dsh-meter",
-  "description": "The DeepSeek time-of-use meter for dsh: what this session cost, which tariff is running, when it flips, and the account balance behind it \u2014 one line under the composer.",
+  "description": "The DeepSeek time-of-use meter for dsh: what this session cost, which tariff is running, when it flips, and the account balance behind it — one line under the composer.",
   "version": "0.4.0",
   "license": "MIT",
   "homepage": "https://dsh.works/dsh-meter/",
@@ -67,7 +67,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-session-projection": "^0.1.0-rc.6 || ^0.1.1-rc.1"
+    "@deepseek-ai/dsh-session-projection": "^0.1.0-rc.6 || ^0.1.1-rc.1 || ^0.1.2-rc.1"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

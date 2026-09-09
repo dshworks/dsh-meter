@@ -1,0 +1,42 @@
+{
+  "recorded": "2026-09-09",
+  "why": "Signatures taken before the announced deepseek-v4-pro -> V4.1 Flash routing. promptTokens are BILLED counts for byte-identical input, which is the only signal a substitution cannot hide without changing what you are charged.",
+  "probes": {
+    "en_short": 12,
+    "en_para": 450,
+    "zh": 110,
+    "code": 440
+  },
+  "models": {
+    "deepseek-v4-pro": {
+      "promptTokens": {
+        "en_short": 86,
+        "en_para": 184,
+        "zh": 148,
+        "code": 259
+      },
+      "echoed": "deepseek-v4-pro",
+      "fingerprint": "a307abda487cd1b463329ccb945ce396"
+    },
+    "deepseek-v4-flash": {
+      "promptTokens": {
+        "en_short": 86,
+        "en_para": 184,
+        "zh": 148,
+        "code": 259
+      },
+      "echoed": "deepseek-v4-flash",
+      "fingerprint": "a26a7955944dc5c60445bff77fac9c8e"
+    },
+    "deepseek-v4-flash-vision-exp": {
+      "promptTokens": {
+        "en_short": 86,
+        "en_para": 184,
+        "zh": 148,
+        "code": 259
+      },
+      "echoed": "deepseek-v4-flash-vision-exp",
+      "fingerprint": "aa8d6caccae4a22492bb51091cfc8eab"
+    }
+  }
+}

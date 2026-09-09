@@ -1,0 +1,99 @@
+# Check the rate card against the bill, not against the brochure.
+#
+# `pricing-watch` reads DeepSeek's published pricing page and diffs it against
+# `lib/core.js`. That is a copy check: it cannot fail when the page and the card
+# agree and the BILLING is something else. This job spends a known number of
+# tokens, waits for the charge to settle, and compares the balance delta against
+# what the card predicts — the only check here that can catch a price that moved
+# without the documentation moving, or a request served by a cheaper model than
+# the one it asked for.
+#
+# It costs real money, so it runs twice a week rather than daily: ~¥0.20 per
+# model per run, two models, ~¥3.5 a month. Flip these to `* * *` if you want
+# next-day detection and are happy at roughly ¥12 a month.
+#
+# The two schedules are not arbitrary. Peak windows are 01:00-04:00 and
+# 06:00-10:00 UTC on weekdays, so Tuesday 07:20 UTC lands inside one and Friday
+# 13:20 UTC lands outside both. `--expect` makes the job fail if that ever stops
+# being true: a cron that drifts out of its window would otherwise spend a year
+# quietly re-checking the same column of the card.
+name: verify-bill
+
+on:
+  schedule:
+    - cron: '20 7 * * 2'   # Tuesday, inside the 06:00-10:00 UTC peak window
+    - cron: '20 13 * * 5'  # Friday, off-peak
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: Yuan to spend per model probe
+        default: '0.2'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    # A round waits for the account to go quiet, spends, then waits again for
+    # the charge to stop moving -- about twelve minutes. A divergence buys one
+    # confirming round, so a bad run is two of those.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install --no-audit --no-fund
+
+      - id: probe
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          EXPECT: ${{ github.event.schedule == '20 7 * * 2' && 'peak' || github.event.schedule == '20 13 * * 5' && 'offpeak' || '' }}
+        run: |
+          set +e
+          node scripts/verify-bill.mjs \
+            ${EXPECT:+--expect "$EXPECT"} \
+            --budget "${{ github.event.inputs.budget || '0.2' }}" \
+            > report.md 2> error.txt
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.md error.txt
+          set -e
+
+      # Exit 1 is the card disagreeing with the bill; exit 2 is not being able
+      # to ask. Both want a human, and neither may rely on the job being red —
+      # a red scheduled run notifies nobody, which is why this step exists at
+      # all. `|| true` on the cat: `error.txt` is empty but present, and this
+      # step runs under `bash -e`, which is exactly how the pricing alarm spent
+      # four days unable to fire.
+      - if: steps.probe.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            if [ "${{ steps.probe.outputs.status }}" = "2" ]; then
+              echo "The billing probe could not finish."
+            else
+              echo "**DeepSeek is not charging what \`lib/core.js\` says it charges.**"
+              echo
+              echo "The published pricing page is not the authority here — the balance is."
+              echo "Check \`pricing-watch\` too: if that one is green, the price moved without"
+              echo "the documentation moving, and every number this meter shows is wrong."
+              echo
+              echo "Do not edit the card from this report alone. Re-run the probe, and read"
+              echo "the implied per-1M rate rather than the total."
+            fi
+            echo
+            echo '```'
+            cat report.md error.txt 2>/dev/null || true
+            echo '```'
+          } > issue.md
+          gh label create billing-drift --color B60205 --force \
+            --description "The shipped rate card disagrees with the actual bill"
+          open=$(gh issue list --label billing-drift --state open --limit 1 --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file issue.md
+          else
+            gh issue create --title "The bill disagrees with the rate card" --label billing-drift --body-file issue.md
+          fi

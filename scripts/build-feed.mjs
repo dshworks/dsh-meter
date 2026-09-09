@@ -33,6 +33,7 @@ import {
   CACHE_DISCOUNT, CURRENCIES, CURRENCY_SYMBOL, PEAK_WINDOWS_BEIJING, PEAK_WINDOWS_UTC,
   RATES, TARIFFS, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, tariffSchedule,
 } from '../lib/core.js'
+import { BILL_CHECK } from '../lib/bill-check.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
@@ -76,6 +77,18 @@ const feed = {
   source: {
     usd: 'https://api-docs.deepseek.com/quick_start/pricing',
     cny: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing',
+  },
+  // The card is diffed against those two pages daily. This is the other check:
+  // what the vendor actually charged. `predicted` is recomputed here from the
+  // same RATES the feed publishes, so the receipt cannot vouch for a card that
+  // has since moved.
+  verifiedAgainstBill: {
+    ...BILL_CHECK,
+    samples: BILL_CHECK.samples.map(sample => {
+      const rate = RATES[sample.model][BILL_CHECK.tariff][BILL_CHECK.currency]
+      const predicted = (sample.tokens.miss * rate.miss + sample.tokens.hit * rate.hit + sample.tokens.out * rate.out) / 1e6
+      return { ...sample, predicted: Number(predicted.toFixed(4)) }
+    }),
   },
   unit: 'currency per 1M tokens',
   currencies: Object.fromEntries(CURRENCIES.map(currency => [currency, { symbol: CURRENCY_SYMBOL[currency] }])),

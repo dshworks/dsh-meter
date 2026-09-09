@@ -27,9 +27,14 @@ import { pathToFileURL } from 'node:url'
 
 import { PEAK_WINDOWS_UTC, RATES } from '../lib/core.js'
 
+/**
+ * Canonical, with the trailing slash. The site is a Tencent COS bucket that
+ * answers the slashless form with a 302 to this one; asking for the redirect
+ * every day is one more hop that can flap.
+ */
 export const PAGES = {
-  usd: 'https://api-docs.deepseek.com/quick_start/pricing',
-  cny: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing',
+  usd: 'https://api-docs.deepseek.com/quick_start/pricing/',
+  cny: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
 }
 
 /** Bucket labels as the two locales write them. Order matters: "cache miss" also contains "cache". */
@@ -190,10 +195,49 @@ export function scrapeWeekdayOnlyCn(html) {
   return /周一至周五|工作日/.test(sentence[1])
 }
 
+/**
+ * Does this page carry the table we came for?
+ *
+ * The docs bucket intermittently answers a real URL with HTTP 200 and the
+ * site's fallback shell — the quick-start index, no pricing table anywhere on
+ * it. Our own docs mirror has been recording the same flap on other pages for
+ * weeks. A shell is not a page that changed shape; it is a page we did not get.
+ */
+export const hasPricingTable = (html) => {
+  const model = Object.keys(RATES)[0]
+  return (html.match(/<table[\s\S]*?<\/table>/gi) ?? []).some(table => table.includes(model))
+}
+
+/** Attempts, and the pause before each retry. Four reads over ~15s, then give up. */
+const RETRY_DELAYS_MS = [1_000, 3_000, 10_000]
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * Read one page, retrying past a fallback shell.
+ *
+ * Retries are deliberately narrow: a non-200 and a shell get another go, a
+ * page that arrives whole does not. If every attempt is a shell we throw
+ * saying so in those words, because "we could not reach DeepSeek" and "the
+ * pricing table moved" want different humans and different urgency.
+ */
 export const fetchPage = async (url) => {
-  const response = await fetch(url, { headers: { accept: 'text/html' }, redirect: 'follow' })
-  if (!response.ok) throw new Error(`${url} answered ${response.status}`)
-  return await response.text()
+  let last
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) await sleep(RETRY_DELAYS_MS[attempt - 1])
+    let html
+    try {
+      const response = await fetch(url, { headers: { accept: 'text/html' }, redirect: 'follow' })
+      if (!response.ok) { last = `answered ${response.status}`; continue }
+      html = await response.text()
+    } catch (error) {
+      last = error.message
+      continue
+    }
+    if (hasPricingTable(html)) return html
+    last = `served the fallback shell — 200 with no pricing table (${html.length} bytes)`
+  }
+  throw new Error(`${url} ${last}, on ${RETRY_DELAYS_MS.length + 1} attempts`)
 }
 
 /** The network half: fetch both pages, diff them against the card, report. */

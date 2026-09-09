@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  scrape, scrapeWeekdayOnly, scrapeWeekdayOnlyCn, scrapeWindows, scrapeWindowsCn,
+  fetchPage, hasPricingTable, scrape, scrapeWeekdayOnly, scrapeWeekdayOnlyCn, scrapeWindows,
+  scrapeWindowsCn,
 } from '../scripts/verify-pricing.mjs'
 
 /**
@@ -161,5 +162,69 @@ describe('the weekday clause', () => {
   it('refuses a page whose footnote it cannot find, rather than guessing', () => {
     expect(() => scrapeWeekdayOnly('<p>nothing here</p>')).toThrow(/Peak hours are/)
     expect(() => scrapeWeekdayOnlyCn('<p>nothing here</p>')).toThrow(/高峰时段/)
+  })
+})
+
+/**
+ * The fallback shell.
+ *
+ * On 2026-09-05 the daily job started reporting "no header row names the
+ * models" from GitHub's runners, four days running, while the same script read
+ * the same URL cleanly from a developer machine twelve times out of twelve.
+ * The bucket serving the docs (Tencent COS) answers HTTP 200 with the
+ * quick-start index — a real page, no pricing table — and the parser called
+ * that a shape change and paged a human. It is neither: it is a read we did
+ * not get, and the answer is to ask again.
+ */
+describe('the fallback shell', () => {
+  const SHELL = '<html><body><h1>Your First API Call</h1><table><tr><td>base_url</td></tr></table></body></html>'
+  const REAL = '<html><body><table><tr><td>MODEL</td><td>deepseek-v4-flash</td></tr></table></body></html>'
+
+  const respond = (bodies) => {
+    const queue = [...bodies]
+    return async () => {
+      const body = queue.shift()
+      if (body instanceof Error) throw body
+      return { ok: body !== undefined, status: body === undefined ? 503 : 200, text: async () => body ?? '' }
+    }
+  }
+
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+
+  it('tells a shell apart from the page it is standing in for', () => {
+    // The shell HAS a table — the base-url block at the top of the index. A
+    // check for "any table at all" would wave it straight through.
+    expect(hasPricingTable(SHELL)).toBe(false)
+    expect(hasPricingTable(REAL)).toBe(true)
+  })
+
+  it('asks again when the first read is a shell, and returns the real page', async () => {
+    vi.stubGlobal('fetch', respond([SHELL, REAL]))
+    await expect(fetchPage('https://example.test/pricing/')).resolves.toBe(REAL)
+  })
+
+  it('retries past a transport error too', async () => {
+    vi.stubGlobal('fetch', respond([new Error('ECONNRESET'), REAL]))
+    await expect(fetchPage('https://example.test/pricing/')).resolves.toBe(REAL)
+  })
+
+  it('does not spend a retry on a page that arrived whole', async () => {
+    const fetchMock = vi.fn(respond([REAL, SHELL]))
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchPage('https://example.test/pricing/')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the shell when every attempt is one, instead of blaming the parser', async () => {
+    vi.stubGlobal('fetch', respond([SHELL, SHELL, SHELL, SHELL]))
+    vi.useFakeTimers()
+    // The old message was "no header row names the models", which reads as
+    // "DeepSeek moved the table" and sends a human to the wrong place.
+    // Assert before advancing the clock: attaching the handler afterwards
+    // leaves the rejection unhandled and vitest reports an error beside a
+    // green suite.
+    const settled = expect(fetchPage('https://example.test/pricing/')).rejects.toThrow(/fallback shell/)
+    await vi.advanceTimersByTimeAsync(60_000)
+    await settled
   })
 })

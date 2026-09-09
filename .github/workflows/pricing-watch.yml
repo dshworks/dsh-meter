@@ -106,11 +106,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TITLE: DeepSeek pricing needs a human
         run: |
+          # `cat` on a file that does not exist returns non-zero, and this step
+          # runs under `bash -e`: for four days the alarm died here, in 6ms,
+          # with no output and no issue, while the job went red and red
+          # notifies nobody. `applied.txt` is absent whenever the apply step
+          # was skipped, which is every unreadable-source run.
           {
             echo "The daily pricing check could not finish on its own."
             echo
             echo '```'
-            cat report.md error.txt applied.txt 2>/dev/null
+            cat report.md error.txt applied.txt 2>/dev/null || true
             echo '```'
           } > issue.md
           # Create the label first: `gh issue list --label` errors on a label

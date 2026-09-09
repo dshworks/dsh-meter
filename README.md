@@ -191,9 +191,76 @@ cheapest token, which is the one an agent sends most of.
 </details>
 
 Source: <https://api-docs.deepseek.com/quick_start/pricing>, diffed
-against both locales daily (see below), last confirmed in sync
-2026-08-20 — and against a real bill: 188,542 cache-miss tokens on pro,
-off-peak, settled at ¥0.84, i.e. ¥4.46/1M against the published 4.5.
+against both locales daily.
+
+**And checked against the bill, twice a week.** A published table is what
+a vendor says; a balance is what it does, and only one of those is what
+you pay. `scripts/verify-bill.mjs` spends a known number of tokens, waits
+for the charge to settle, and compares the balance delta against what this
+card predicts. Measured 2026-09-09, peak, on a live account:
+
+| model | tokens | card predicts | actually settled |
+| --- | --- | --- | --- |
+| `deepseek-v4-flash` | 254,682 miss | ¥0.7641 | **¥0.77** |
+| `deepseek-v4-pro` | 127,491 miss | ¥1.1475 | **¥1.14** |
+
+The two checks answer different questions, and the pair is the diagnosis:
+
+| pricing page | the bill | what it means |
+| --- | --- | --- |
+| ok | ok | the card is right |
+| differs | ok | the page moved, billing has not — a pre-announcement |
+| ok | **differs** | **billing moved and the page did not** |
+| differs | differs | a repricing; the card needs updating |
+
+Row three has no other detector. It also covers something that is not a
+price change at all: a request served by a model other than the one asked
+for, billed at that model's rate. The API's `model` response field is an
+echo of the request — measured across every published id — so the name can
+never be the evidence for that. The money can.
+
+<details>
+<summary>Three things the probe got wrong first, and how</summary>
+
+Measuring a balance is harder than it sounds, and the first version of this
+script looked right until it ran.
+
+**Settlement is delayed, and it arrives in steps.** Two hand probes settled
+as one lump about 145s after the requests, so v1 waited for two consecutive
+equal balance reads. Its first real run reported `deepseek-v4-pro` billing
+¥1.42/1M against a card of ¥9 — confident, alarming and false. The charge
+had reached ¥0.02, then ¥0.04, and a plateau between two steps looks exactly
+like a finished settlement if a plateau is all you check for. A delta is
+settled only once it has not moved for **longer than a whole settlement
+takes**, and a zero delta is never settled at all — for the first two
+minutes a real charge reads as ¥0.00, which is indistinguishable from free.
+
+**A probe contaminates the next one.** Settlement outlives a probe, so
+probe N's tail lands inside probe N+1's window and is billed to the wrong
+model. All models are now measured in one window against one summed
+prediction; `--isolate <model>` re-probes a single one when something needs
+localising.
+
+**"A bill can only be contaminated upwards" was wrong.** v1 argued that other
+traffic on the key can only *add*, so a bill that looked too small needed no
+confirming. Incomplete settlement also makes a bill look small, and did.
+Both directions are re-probed now.
+
+**Settlement has a tail, and the tail was a 3% "mystery".** A full curve,
+sampled every 20 seconds: ¥0.27 at t+40s, ¥0.26 at t+100s — then single
+cents at t+222s and t+749s, 500 seconds apart and still arriving twelve
+minutes in. About two cents a round land after anyone has stopped watching,
+which is precisely the ~3% by which every earlier reading fell short of the
+eventual charge. So the probe does not wait for the true total, because
+waiting for it never terminates: a cent is noise, a step is a step, and the
+alarm sits far above both. Every failure worth catching is enormous next to
+a few cents — a rerouted model is 3x, a wrong tariff column 2x, a mispriced
+cache bucket 30x.
+
+</details>
+
+This verifies the **CNY card only**. The balance is CNY; the USD table is
+published separately and there is no USD balance to read.
 
 ## The card is also a feed
 

@@ -16,6 +16,14 @@
  * because a documentation site is slow; a price alarm must not be silent
  * because nobody opened a PR this week. Different jobs, different clocks.
  *
+ * And it is not the authority. This compares our copy of the card against the
+ * page it was copied from — a copy check. It cannot fail when the page and the
+ * card agree and the BILLING is something else, which is the case that costs a
+ * user money. `scripts/verify-bill.mjs` spends real tokens and reads the real
+ * balance; when the two checks disagree, that one is right. Read them as a
+ * pair: this one green and the bill red means the price moved without the
+ * documentation moving, and there is no other detector for that.
+ *
  * The parsing half is exported and unit-tested against synthetic footnotes
  * (tests/verify-pricing.spec.mjs); only `main()` touches the network, and it
  * runs only when this file is invoked directly.

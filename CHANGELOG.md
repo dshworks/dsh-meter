@@ -4,33 +4,50 @@
 
 ### Added
 
-- **A model-substitution canary** (`scripts/model-canary.mjs`,
-  `data/model-signatures.json`). On 2026-09-09 DeepSeek told its WeChat
-  community groups that when V4.1 Flash ships — around 2026-09-10 Beijing
-  time — every `deepseek-v4-pro` request will be routed to V4.1 Flash and
-  billed at the Flash rate. Nothing about it is in the changelog, the news
-  index, the pricing page or `/models`, and the pricing page still lists
-  `deepseek-v4-pro` at $1.98/$3.96 per 1M output.
-  - This meter prices by the model that *answered* — `assistant/message`'s
-    `message.source.model`, which is the API's `model` response field. That
-    field is an **echo**: ask for `deepseek-v4-pro` and it says
-    `deepseek-v4-pro`. If a substitution keeps echoing, the meter multiplies
-    Flash-priced tokens by the Pro rate — **three times the real bill**,
-    silently, on the one number this plugin exists to produce.
-  - So the name is not the evidence. The canary records two things that are:
-    `system_fingerprint`, and the **billed** prompt-token count for four fixed
-    probes. Every V4-family model bills exactly 53 tokens more than V4.1 for
-    byte-identical input (86/33, 184/131, 148/95, 259/206 — English, Chinese
-    and code alike, so it is a per-request preamble and not a denser
-    tokenizer). A substitution cannot hide that without changing what you are
-    charged.
-  - The baseline in `data/model-signatures.json` was taken **before** the
-    switchover. After it, the before is unrecoverable.
-  - A fingerprint moving on its own is a redeploy and does not fire. Tested
-    against the real V4.1 numbers, and mutation-checked: making `compare()`
-    trust the echoed model name turns three tests red.
-  - Not scheduled. Running it daily needs `DEEPSEEK_API_KEY` in this public
-    repo's Actions secrets, which is a decision for a human.
+- **The rate card is now checked against the bill** (`scripts/verify-bill.mjs`,
+  `.github/workflows/verify-bill.yml`). `pricing-watch` diffs our copy of the
+  card against DeepSeek's published pricing page — a copy check, which cannot
+  fail when the page and the card agree and the *billing* is something else.
+  Billing is the only thing a cost meter is actually claiming to know.
+  - The probe spends a known number of tokens, waits for settlement, and
+    compares the balance delta against what `lib/core.js` predicts. Measured on
+    a live account 2026-09-09 at peak: flash 254,682 miss tokens, card ¥0.7641,
+    settled **¥0.77**; pro 127,491 miss tokens, card ¥1.1475, settled **¥1.14**.
+  - Three things it got wrong first. **Settlement is delayed and arrives in
+    steps**, so v1's "two equal reads" rule accepted a mid-settlement plateau
+    and its first real run reported pro billing ¥1.42/1M against a card of ¥9 —
+    a confident, alarming, false finding. A delta is settled only once it has
+    not moved for longer than a whole settlement takes, and zero is never
+    settled. **A probe contaminates the next one**, because settlement outlives
+    it, so all models are measured in one window against one summed prediction
+    (`--isolate` localises when needed). And **"a bill can only be contaminated
+    upwards" was false** — incomplete settlement also makes one look small, so
+    both directions are now re-probed before anyone is told.
+  - **Settlement has a tail, and the tail was the 3% "residual"**: sampled
+    every 20s, a charge landed ¥0.27 at t+40s and ¥0.26 at t+100s, then single
+    cents at t+222s and t+749s — 500s apart, still arriving twelve minutes in.
+    About two cents a round land after anyone stops watching, which is exactly
+    the ~3% by which earlier readings fell short. Waiting for the true total
+    never terminates, so cents are treated as noise and steps as steps, with
+    drift measured across the whole quiet window so three cents cannot creep
+    past one at a time. The alarm sits far above both — every failure worth
+    catching is 2x-30x.
+  - Twice a week rather than daily, because it costs real money: ~¥0.20 per
+    model per run, ~¥3.5 a month. One run lands inside a peak window and one
+    outside, so both columns of the card get checked. `--expect` fails the run
+    if the cron ever drifts out of its window, and a test asserts the same
+    thing against `tariffAt()` at commit time — a drifting cron would otherwise
+    spend a year re-checking one column and reporting green.
+  - Verifies the **CNY card only**: the balance is CNY and the USD table is
+    published separately.
+
+### Removed
+
+- `scripts/model-canary.mjs` and its baseline. It recorded each model's billed
+  prompt-token signature so that a specific announced substitution could be
+  detected by a 53-token offset. `verify-bill` answers the same question with
+  money, directly, and answers several others besides — including the ones
+  nobody announces. One mechanism per question.
 
 ## 0.4.0 - 2026-08-25
 

@@ -1,6 +1,6 @@
 {
   "schema": "dsh-meter/pricing@2",
-  "generator": "@dshworks/dsh-meter@0.5.0",
+  "generator": "@dshworks/dsh-meter@0.5.1",
   "homepage": "https://dsh.works/dsh-meter/",
   "source": {
     "usd": "https://api-docs.deepseek.com/quick_start/pricing",
@@ -372,8 +372,8 @@
   "retiredModels": {
     "deepseek-v4-flash": {
       "servedBy": "deepseek-flash",
-      "since": "2026-09-09T16:00:00.000Z",
-      "sinceEpochMs": 1788969600000,
+      "since": "2026-09-10T11:00:00.000Z",
+      "sinceEpochMs": 1789038000000,
       "note": "Requests under this name are served by deepseek-flash and billed at its rates from `since`. The rates below are what the name billed before that, for repricing history only.",
       "ratesBefore": {
         "flat": {
@@ -416,8 +416,8 @@
     },
     "deepseek-v4-flash-vision-exp": {
       "servedBy": "deepseek-flash",
-      "since": "2026-09-09T16:00:00.000Z",
-      "sinceEpochMs": 1788969600000,
+      "since": "2026-09-10T11:00:00.000Z",
+      "sinceEpochMs": 1789038000000,
       "note": "Requests under this name are served by deepseek-flash and billed at its rates from `since`. The rates below are what the name billed before that, for repricing history only.",
       "ratesBefore": {
         "offpeak": {

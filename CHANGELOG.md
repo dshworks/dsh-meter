@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1 - 2026-09-18
+
+### Fixed
+
+- **The V4.1 cutover instant moves to 2026-09-10 11:00 UTC** (was
+  2026-09-09 16:00). 0.5.0 took 00:00 Beijing on the pattern of earlier
+  DeepSeek price changes; our docs mirror shows the pricing page still
+  carried the old card at 2026-09-10 04:50 UTC and the new one at 11:27 UTC.
+  The meter now takes the last whole hour before the new card was seen, so
+  an error inside that gap can only overstate a bill — and it agrees with
+  thevibeworks/deepseek-cli, which reached the same instant independently.
+  Any cached fold is recomputed (`stateVersion` 4).
+
 ## 0.5.0 - 2026-09-18
 
 ### Changed

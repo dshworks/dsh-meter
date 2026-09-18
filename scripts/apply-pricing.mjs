@@ -37,7 +37,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { PEAK_WINDOWS_UTC, RATES, TARIFFS } from '../lib/core.js'
+import { PEAK_WINDOWS_UTC, RATES, RETIRED, TARIFFS } from '../lib/core.js'
 import { PAGES, fetchPage, scrape, scrapeWindows, scrapeWindowsCn } from './verify-pricing.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -70,6 +70,14 @@ try {
 const models = scraped.usd.models
 if (JSON.stringify(models) !== JSON.stringify(scraped.cny.models)) {
   die(`the two pages list different models (${models} vs ${scraped.cny.models})`, 1)
+}
+
+/* A model leaving the page is a retirement, and a retirement needs a
+ * successor and an instant — `RETIRED` in lib/core.js — or every session
+ * logged against it loses its price. That is a decision, not a splice. */
+const dropped = Object.keys(RATES).filter(model => !models.includes(model) && RETIRED[model] === undefined)
+if (dropped.length > 0) {
+  die(`${dropped.join(', ')} left the published table — add ${dropped.length === 1 ? 'it' : 'them'} to RETIRED in lib/core.js (successor + instant) before rewriting, or its history loses its price`, 1)
 }
 
 /* ---- build the replacement literals ---- */

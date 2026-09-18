@@ -79,8 +79,40 @@ describe('the table parser', () => {
     }
   })
 
-  it('refuses a page that no longer lists every model we price', () => {
-    expect(() => scrape(table([row('MODEL', 'deepseek-v4-flash')]))).toThrow(/every model we price/)
+  it('refuses a table of models that has no pricing section', () => {
+    expect(() => scrape(table([row('MODEL', 'deepseek-v4-flash')]))).toThrow(/pricing section/)
+  })
+
+  /* The 2026-09-10 table, as served: V4.1 Flash took the name `deepseek-flash`,
+   * every header carries a footnote marker, and not one model we priced the
+   * day before is on it. The old parser found tables by "lists every model we
+   * price", called this page a fallback shell, and the alarm reported "could
+   * not read" for eight days while Flash's price had been cut. */
+  const V41_PAGE = table([
+    row('MODEL', 'deepseek-flash<sup>(1)</sup>', 'deepseek-v4-pro<sup>(2)</sup>'),
+    row('MODEL VERSION', 'DeepSeek-V4.1-Flash', 'DeepSeek-V4-Pro-0813'),
+    row('CONTEXT LENGTH', '1M'),
+    row('PRICING<sup>(3)</sup>', '1M INPUT TOKENS (CACHE HIT)', 'OFF-PEAK', '$0.003', '$0.022'),
+    row('PEAK', '$0.006', '$0.044'),
+    row('1M INPUT TOKENS (CACHE MISS)', 'OFF-PEAK', '$0.15', '$0.66'),
+    row('PEAK', '$0.3', '$1.32'),
+    row('1M OUTPUT TOKENS', 'OFF-PEAK', '$0.6', '$1.98'),
+    row('PEAK', '$1.2', '$3.96'),
+    row('Concurrency Limit<sup>(4)</sup>', '2500', '500'),
+  ])
+
+  it('reads a renamed model and strips the footnote marker off its header', () => {
+    const { models, rates } = scrape(V41_PAGE)
+    expect(models).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
+    expect(rates['deepseek-flash'].offpeak).toEqual({ hit: 0.003, miss: 0.15, out: 0.6 })
+    expect(rates['deepseek-flash'].peak).toEqual({ hit: 0.006, miss: 0.3, out: 1.2 })
+    expect(rates['deepseek-v4-pro'].peak).toEqual({ hit: 0.044, miss: 1.32, out: 3.96 })
+  })
+
+  it('does not mistake a table of models it has never seen for a fallback shell', () => {
+    const unknown = V41_PAGE.replaceAll('deepseek-flash', 'deepseek-v9-lightning').replaceAll('deepseek-v4-pro', 'deepseek-v9-pro')
+    expect(hasPricingTable(unknown)).toBe(true)
+    expect(scrape(unknown).models).toEqual(['deepseek-v9-lightning', 'deepseek-v9-pro'])
   })
 
   it('refuses a price row whose number count stops matching the model count', () => {
@@ -178,7 +210,7 @@ describe('the weekday clause', () => {
  */
 describe('the fallback shell', () => {
   const SHELL = '<html><body><h1>Your First API Call</h1><table><tr><td>base_url</td></tr></table></body></html>'
-  const REAL = '<html><body><table><tr><td>MODEL</td><td>deepseek-v4-flash</td></tr></table></body></html>'
+  const REAL = '<html><body><table><tr><td>MODEL</td><td>deepseek-flash</td></tr><tr><td>PRICING</td><td>$0.15</td></tr></table></body></html>'
 
   const respond = (bodies) => {
     const queue = [...bodies]

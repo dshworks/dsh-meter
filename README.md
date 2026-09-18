@@ -314,7 +314,7 @@ In JavaScript, skip the fetch and call the same module directly:
 import { costOf, tariffAt } from '@dshworks/dsh-meter/core'
 
 const tokens = { miss: 188_542, hit: 1_204_880, out: 9_310 }
-costOf(tokens, 'deepseek-v4-pro', tariffAt(Date.now()), 'cny')
+costOf(tokens, 'deepseek-flash', tariffAt(Date.now()), 'cny')
 ```
 
 `lib/core.js` imports nothing. Rate card, tariff clock, and cost fold are
@@ -333,7 +333,7 @@ running:
 curl -s https://dsh.works/dsh-meter/pricing.json | jq -r '
   ((now + 8*3600) | gmtime) as $b
   | .timeOfUse.scheduleBeijing[$b[6]][$b[3]] as $t
-  | "\($t) · v4-pro out $\(.models["deepseek-v4-pro"].rates[$t].usd.out)/1M"'
+  | "\($t) · flash out $\(.models["deepseek-flash"].rates[$t].usd.out)/1M"'
 ```
 
 Shift by `8*3600` first, then break down **once**, and take both indices

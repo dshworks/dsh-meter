@@ -175,7 +175,7 @@ JavaScript 里可以跳过这次 fetch，直接调同一个模块：
 import { costOf, tariffAt } from '@dshworks/dsh-meter/core'
 
 const tokens = { miss: 188_542, hit: 1_204_880, out: 9_310 }
-costOf(tokens, 'deepseek-v4-pro', tariffAt(Date.now()), 'cny')
+costOf(tokens, 'deepseek-flash', tariffAt(Date.now()), 'cny')
 ```
 
 `lib/core.js` 不依赖任何包。价目表、档位时钟、成本折叠都是纯函数，内部不读时钟，所以历史会话按它当时真实的档位回算。

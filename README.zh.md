@@ -127,7 +127,7 @@ DeepSeek 公布的是**两张互相独立的价目表**——国际站按美元�
 
 **`deepseek-flash` 即 DeepSeek-V4.1-Flash，自 2026-09-10 起。** 它取代了 V4 Flash 和 V4 Flash Vision Exp（视觉能力已内置），Flash 价格随之下调：空闲时段缓存未命中 ¥1.5 -> ¥1，输出 ¥4.5 -> ¥4，缓存命中 ¥0.05 -> ¥0.02。旧模型名仍可调用，由 V4.1 Flash 提供服务并按 Flash 价格计费，所以切换之后发出的 `deepseek-v4-flash` 请求，电表按 `deepseek-flash` 计费；切换之前的仍按旧价。API 返回的模型名只是回显你发出的名字，看不出实际由谁计费；发出时间可以。
 
-DeepSeek 公布的是日期，不是时刻。电表在 **UTC 2026-09-10 11:00** 切换：我们的文档镜像当天 UTC 04:50 抓到的价格页还是旧价，11:27 抓到新价，这里取看到新价之前最后一个整点，所以误差只会让账单偏高，不会偏低。UTC 2026-09-11 17:03 的账单探测按新价结算，分毫不差。
+新价格于 **北京时间 2026 年 9 月 10 日 12:00**（UTC 04:00）生效，见 DeepSeek 的[发布公告](https://api-docs.deepseek.com/zh-cn/news/news260910)，电表就在这一刻切换。价格页本身晚了好几个小时才更新，所以别用参考页面的变动时间去推断调价时刻。UTC 2026-09-11 17:03 的账单探测按新价结算，分毫不差。
 
 <details>
 <summary>已退役的统一价，保留用于回算历史</summary>
@@ -146,7 +146,7 @@ DeepSeek 公布的是日期，不是时刻。电表在 **UTC 2026-09-10 11:00** 
 <details>
 <summary>已退役的 V4 Flash 价目，保留用于回算历史</summary>
 
-`deepseek-v4-flash` 与 `deepseek-v4-flash-vision-exp` 在 **UTC 2026-09-10 11:00** 之前按此计费，之后均按 `deepseek-flash` 计费。
+`deepseek-v4-flash` 与 `deepseek-v4-flash-vision-exp` 在 **UTC 2026-09-10 04:00**（北京时间 12:00）之前按此计费，之后均按 `deepseek-flash` 计费。
 
 | | 缓存命中 | 缓存未命中 | 输出 |
 |---|---|---|---|

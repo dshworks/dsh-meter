@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.3 - 2026-09-18
+
+### Fixed
+
+- **The V4.1 cutover is 2026-09-10 04:00 UTC, as DeepSeek published it.**
+  The release note says "New pricing takes effect at 04:00 UTC on Sept 10,
+  2026" (12:00 Beijing). 0.5.0 guessed 00:00 Beijing from a pattern; 0.5.1
+  guessed 11:00 UTC from when our docs mirror first saw the new pricing page,
+  which lagged the bill by hours. Requests between 04:00 and 11:00 UTC that
+  day were billed at the new Flash price and are now metered at it.
+  `stateVersion` 5.
+
 ## 0.5.2 - 2026-09-18
 
 ### Changed

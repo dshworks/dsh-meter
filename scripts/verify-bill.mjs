@@ -80,7 +80,7 @@
  * Env: DEEPSEEK_API_KEY (required).
  * Exit: 0 the card matches the bill, 1 it does not, 2 could not measure.
  */
-import { RATES, tariffAt } from '../lib/core.js'
+import { RATES, rateOf, tariffAt } from '../lib/core.js'
 
 const API = 'https://api.deepseek.com'
 const KEY = process.env.DEEPSEEK_API_KEY ?? ''
@@ -135,9 +135,19 @@ export const SETTLE = {
  *
  * Not a confidence interval — a floor under which we admit we cannot tell.
  * See the settlement tail above: a few cents a round arrive after any probe
- * has finished, and every failure worth alarming on is several hundred percent.
+ * has finished.
+ *
+ * This used to be 25%, on the argument that "every failure worth alarming on
+ * is several hundred percent". The first real price change proved otherwise.
+ * DeepSeek cut Flash by a third on 2026-09-10; the probe spends the same on
+ * each model, so a one-model change reaches the total diluted, and the
+ * 2026-09-11 run read ¥0.58 against ¥0.749 predicted — 23% under — and
+ * printed `ok`. It had measured the price cut to the cent and waved it
+ * through. A band has to be narrower than the smallest real change divided by
+ * the number of models it is spread across; measured noise on a settled
+ * round is under 1% (¥0.75 vs ¥0.7521, ¥1.14 vs ¥1.1475, ¥0.77 vs ¥0.7641).
  */
-export const TOLERANCE = { relative: 0.25, absoluteCny: 0.03 }
+export const TOLERANCE = { relative: 0.1, absoluteCny: 0.03 }
 
 const argv = process.argv.slice(2)
 const flag = (name) => argv.includes(name)
@@ -171,14 +181,14 @@ export const cnyOf = (balance) => {
  * recomputed from the token counts the API says it billed.
  */
 export function probeWords(model, tariff, budget = DEFAULT_BUDGET) {
-  const missRate = RATES[model]?.[tariff]?.cny?.miss
+  const missRate = rateOf(model, tariff, 'cny')?.miss
   if (typeof missRate !== 'number' || missRate <= 0) throw new Error(`no CNY miss rate for ${model} ${tariff}`)
   return Math.max(200, Math.round((budget * 1e6) / missRate / TOKENS_PER_WORD))
 }
 
 /** What the card says a measured usage total should have cost, in CNY. */
 export function predict(totals, model, tariff) {
-  const rate = RATES[model]?.[tariff]?.cny
+  const rate = rateOf(model, tariff, 'cny')
   if (rate === undefined) throw new Error(`no CNY rates for ${model} ${tariff}`)
   return (totals.miss * rate.miss + totals.hit * rate.hit + totals.out * rate.out) / 1e6
 }
@@ -289,14 +299,18 @@ async function main() {
   const tariff = tariffAt(Date.now())
 
   // The schedule picks the tariff: one run inside a peak window, one outside,
-  // so both columns get checked against money. Saying which one a run expects
-  // turns a drifting cron into a failure instead of a year of silently
-  // re-checking the same column.
+  // so both columns get checked against money. Whether each cron expression
+  // lands in its window is a static fact, asserted in tests/verify-bill.spec.
+  // What can still go wrong at runtime is GitHub starting the job late: the
+  // Tuesday 07:20 UTC run of 2026-09-15 started at 12:40, off-peak, and this
+  // used to refuse and file "fix the cron" — blaming a cron that was right and
+  // skipping a measurement that was still worth taking. The money is as real
+  // off-peak as on, so measure the column the run actually landed in and say
+  // which one went unchecked.
   const expected = after('--expect')
-  if (expected !== null && expected !== tariff) {
-    process.stderr.write(`verify-bill: scheduled as ${expected} but this run is ${tariff}; fix the cron\n`)
-    return 2
-  }
+  const late = expected !== null && expected !== tariff
+    ? `scheduled for the ${expected} column but GitHub started this run at ${new Date().toISOString().slice(11, 16)} UTC, in ${tariff}; measuring ${tariff} instead — ${expected} goes unchecked until the next run`
+    : null
 
   if (flag('--dry-run')) {
     note(`tariff right now: ${tariff}`)
@@ -341,6 +355,7 @@ async function main() {
   }
 
   note(`Tariff **${tariff}**. ${models.length} model(s), ~¥${(budget * models.length).toFixed(2)} total.\n`)
+  if (late !== null) note(`  note: ${late}\n`)
   let result
   try {
     result = { ...await round(), ...judge(0, 0) }

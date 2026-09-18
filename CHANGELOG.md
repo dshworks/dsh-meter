@@ -1,6 +1,60 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-09-18
+
+### Changed
+
+- **DeepSeek-V4.1-Flash, and the Flash price cut.** On 2026-09-10 DeepSeek
+  replaced V4 Flash and V4 Flash Vision Exp with V4.1 Flash under the name
+  `deepseek-flash`, and cut the Flash price (off-peak CNY: miss ¥1.5 -> ¥1,
+  output ¥4.5 -> ¥4, hit ¥0.05 -> ¥0.02; peak is still 2x). Pro is unchanged.
+  The card now carries `deepseek-flash`, written by `apply-pricing` from both
+  pages. The old names still answer and bill as Flash, so a request under
+  `deepseek-v4-flash` or `deepseek-v4-flash-vision-exp` dispatched after
+  **2026-09-09 16:00 UTC** is billed as `deepseek-flash`; one dispatched
+  before keeps the V4 Flash price (`RETIRED`, `billedModel`). DeepSeek gave a
+  date, not an instant; our bills bracket it between 2026-09-09 08:44 and
+  2026-09-11 17:03 UTC. Until this release the meter overstated every Flash
+  request since the cutover by 50% on cache miss and 2.5x on cache hit.
+- **The pricing alarm had been blind for eight days, and said something
+  else.** It found the price table by "the table that lists every model we
+  price". The day `deepseek-v4-flash` left the page, no table qualified, the
+  fallback-shell guard retried a perfectly good page four times, and the daily
+  issue read *served the fallback shell* — sending a human to look for a CDN
+  flap while the prices it exists to watch had been cut. Tables are now found
+  by shape (a row of `deepseek-` models plus a pricing section), header
+  footnote markers like `deepseek-flash(1)` are stripped, and a table of models
+  we have never heard of reaches the diff instead of dying in the parser.
+  `apply-pricing` also refuses to drop a model that left the page until it has
+  a `RETIRED` entry, so history cannot lose its price in a splice.
+- **The bill check measured the price cut and called it `ok`.** The
+  2026-09-11 off-peak run settled ¥0.58 against ¥0.749 predicted — 23% under,
+  which is the new card to the cent (¥0.583) — inside a 25% band chosen on the
+  belief that "every failure worth alarming on is several hundred percent".
+  A one-model change spread over a multi-model probe arrives diluted. The band
+  is 10% now (measured round noise is under 1%), and a test replays that run's
+  exact token counts: the old card must read `cheaper`, the new card `match`.
+- **A late runner is not a wrong cron.** GitHub started the Tuesday 07:20 UTC
+  peak run of 2026-09-15 at 12:40, off-peak, and the probe refused and filed
+  "fix the cron". The crons are asserted by a test; at runtime a late start
+  now measures the column it landed in and says which one went unchecked.
+- **dsh 0.1.5.** `@deepseek-ai/dsh-session-projection` peer range gains
+  `^0.1.5-rc.1` (dsh `latest` since 2026-09-10). Session log v3 dropped
+  `assistant/chunk`; a failed or retried request is now one
+  `assistant/attempt` with its stream embedded, and a usage report inside it
+  is billed — DeepSeek charged for it whether or not the retry succeeded. The
+  projection `stateVersion` is 3, so a fold cached under the old semantics is
+  discarded instead of carried forward.
+- **READMEs are checked against the card** (`tests/readme-claims.spec.mjs`).
+  The Chinese README had described peak as every day since weekends went
+  off-peak on 2026-08-22.
+
+Verified against money, not the page: the 2026-09-11 run's own token counts
+price at ¥0.583 on the new card and it settled at ¥0.58. A fresh probe on
+2026-09-18 read ¥0.60 against ¥0.4999, with ¥0.10 of it arriving 20s after
+spending — before any real charge settles, so other traffic on a shared key —
+and printed `ok` under the old band. It is not a receipt; under the new band it
+would have re-probed instead.
 
 ### Added
 

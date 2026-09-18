@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RATES, TIME_OF_USE_FROM, billedTokens, foldEvent, init, schema, view } from '../lib/core.js'
+import { RATES, TIME_OF_USE_FROM, V41_FLASH_FROM, billedTokens, foldEvent, init, rateOf, schema, view } from '../lib/core.js'
 
 const utc = (year, month, day, hour, minute = 0) => Date.UTC(year, month - 1, day, hour, minute)
 
@@ -126,9 +126,89 @@ describe('the fold', () => {
       stepStart(peak, 0, 1),
       message(peak + 1000, 'deepseek-v4-flash', usage(1_000_000, 0, 0), 0, 1),
     ]))
-    expect(value.byTariff.offpeak).toBeCloseTo(RATES['deepseek-v4-flash'].offpeak.usd.miss, 10)
-    expect(value.byTariff.peak).toBeCloseTo(RATES['deepseek-v4-flash'].peak.usd.miss, 10)
+    expect(value.byTariff.offpeak).toBeCloseTo(rateOf('deepseek-v4-flash', 'offpeak', 'usd').miss, 10)
+    expect(value.byTariff.peak).toBeCloseTo(rateOf('deepseek-v4-flash', 'peak', 'usd').miss, 10)
     expect(value.cost).toBeCloseTo(value.byTariff.offpeak + value.byTariff.peak, 10)
+  })
+
+  describe('the V4.1 Flash retirement', () => {
+    /* Weekday off-peak on both sides of the cutover: 2026-09-09 is a
+     * Wednesday, and 12:00 / 16:30 UTC are outside both peak windows. */
+    const oldDays = utc(2026, 9, 9, 12)
+    const newDays = utc(2026, 9, 9, 16, 30)
+    const flashSession = at => fold([
+      stepStart(at),
+      header(at, 'deepseek-v4-flash'),
+      message(at + 5_000, 'deepseek-v4-flash', usage(1_000_000, 0, 0)),
+    ])
+
+    it('bills a legacy name at the old Flash price before the cutover', () => {
+      expect(newDays).toBeGreaterThan(V41_FLASH_FROM)
+      expect(oldDays).toBeLessThan(V41_FLASH_FROM)
+      const value = priced(flashSession(oldDays), 'cny')
+      expect(value.cost).toBe(1.5)
+      expect(value.modelCost).toEqual({ 'deepseek-v4-flash': 1.5 })
+    })
+
+    it('bills the same name as deepseek-flash, at its price, after it', () => {
+      // The echo still says deepseek-v4-flash; the bill says V4.1 Flash.
+      const value = priced(flashSession(newDays), 'cny')
+      expect(value.cost).toBe(RATES['deepseek-flash'].offpeak.cny.miss)
+      expect(value.cost).toBe(1)
+      expect(value.modelCost).toEqual({ 'deepseek-flash': 1 })
+    })
+
+    it('folds the retired vision model into the same successor', () => {
+      const value = priced(fold([
+        stepStart(newDays),
+        header(newDays, 'deepseek-v4-flash-vision-exp'),
+        message(newDays + 5_000, 'deepseek-v4-flash-vision-exp', usage(0, 0, 1_000_000)),
+      ]), 'cny')
+      expect(value.modelCost).toEqual({ 'deepseek-flash': 4 })
+    })
+
+    it('prices the new name, which the old card billed at zero', () => {
+      const value = priced(fold([
+        stepStart(newDays),
+        header(newDays, 'deepseek-flash'),
+        message(newDays + 5_000, 'deepseek-flash', usage(1_000_000, 1_000_000, 1_000_000)),
+      ]), 'usd')
+      expect(value.cost).toBeCloseTo(0.15 + 0.003 + 0.6, 10)
+    })
+  })
+
+  describe('dsh 0.1.5 attempts', () => {
+    const at = utc(2026, 9, 16, 12)
+    const attempt = (time, reported, turn = 0, step = 0) => event('assistant/attempt', time, {
+      turn,
+      step,
+      stream: [
+        { type: 'text-chunks', time0: time, index: 0, dt: [0], texts: ['partial'] },
+        ...(reported === undefined ? [] : [{ type: 'chunk', time, chunk: { type: 'usage', usage: reported } }]),
+      ],
+    })
+
+    it('bills a failed attempt that reported usage, and the retry after it', () => {
+      const value = priced(fold([
+        stepStart(at),
+        header(at, 'deepseek-flash'),
+        attempt(at + 1_000, usage(1_000_000, 0, 0)),
+        message(at + 9_000, 'deepseek-flash', usage(1_000_000, 0, 0)),
+      ]), 'cny')
+      // Two requests, both charged: the retry must not replace the attempt.
+      expect(value.cost).toBe(2)
+      expect(value.models[0].requests).toBe(2)
+    })
+
+    it('bills nothing for an attempt that died before the usage report', () => {
+      const value = priced(fold([
+        stepStart(at),
+        header(at, 'deepseek-flash'),
+        attempt(at + 1_000, undefined),
+        message(at + 9_000, 'deepseek-flash', usage(1_000_000, 0, 0)),
+      ]), 'cny')
+      expect(value.cost).toBe(1)
+    })
   })
 
   it('bills a request by its dispatch time, not by when the answer landed', () => {

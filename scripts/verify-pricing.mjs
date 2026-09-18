@@ -72,6 +72,44 @@ const text = (html) => html
   .replace(/\s+/g, ' ')
   .trim()
 
+/**
+ * A model id as the header cell spells it, without the footnote marker.
+ *
+ * The 2026-09-10 table writes `deepseek-flash(1)` — the `(1)` is a `<sup>`
+ * pointing at a footnote, flattened into the cell's text. An exact-match
+ * header test read that row as having no models at all.
+ */
+const MODEL_CELL = /^(deepseek-[a-z0-9][a-z0-9.-]*?)\s*(?:\(\d+\)|\[\d+\])?$/i
+
+/** The cells of every row of one table, as text. */
+const rowsOf = table => table.split(/<\/tr>/i)
+  .map(row => [...row.matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi)].map(cell => text(cell[1])))
+  .filter(cells => cells.length > 0)
+
+/** The model ids one row names, in column order; empty for any other row. */
+const modelsOf = cells => cells.flatMap((cell) => {
+  const match = MODEL_CELL.exec(cell)
+  return match === null ? [] : [match[1].toLowerCase()]
+})
+
+/**
+ * The pricing table, found by its SHAPE: a row naming `deepseek-` models and a
+ * row opening the pricing section.
+ *
+ * It used to be found by content — the table that lists every model we price.
+ * That is a question about our card, not about the page, and the day DeepSeek
+ * renamed `deepseek-v4-flash` to `deepseek-flash` it answered "no table here".
+ * `fetchPage` then called a perfectly good page a fallback shell, retried it,
+ * and the alarm reported "could not read" for eight days while the prices it
+ * exists to watch had been cut. A page that sells models we do not know about
+ * is the most important drift there is; it must reach the diff, not die here.
+ */
+export const pricingTableOf = html => (html.match(/<table[\s\S]*?<\/table>/gi) ?? []).find((table) => {
+  const rows = rowsOf(table)
+  return rows.some(cells => modelsOf(cells).length > 0)
+    && rows.some(cells => cells.some(cell => PRICING_SECTION.test(cell)))
+})
+
 /** A cell holding one number, in either locale's notation: `$0.22`, `1.5元`, `0.05 元`. */
 const priceOf = (cell) => {
   const match = /^[$¥￥]?\s*(\d+(?:\.\d+)?)\s*(元|美元)?$/.exec(cell)
@@ -84,17 +122,11 @@ const priceOf = (cell) => {
  * @returns {{models: string[], rates: object}} model order and rates[model][tariff][bucket].
  */
 export function scrape(html) {
-  const tables = html.match(/<table[\s\S]*?<\/table>/gi) ?? []
-  const table = tables.find(candidate => Object.keys(RATES).every(model => candidate.includes(model)))
-  if (table === undefined) throw new Error('no table on the page lists every model we price')
+  const table = pricingTableOf(html)
+  if (table === undefined) throw new Error('no table on the page has a pricing section and a row of deepseek- models')
 
-  const rows = table.split(/<\/tr>/i)
-    .map(row => [...row.matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi)].map(cell => text(cell[1])))
-    .filter(cells => cells.length > 0)
-
-  const header = rows.find(cells => cells.some(cell => cell === Object.keys(RATES)[0]))
-  if (header === undefined) throw new Error('no header row names the models')
-  const models = header.filter(cell => /^deepseek-/.test(cell))
+  const rows = rowsOf(table)
+  const models = rows.map(modelsOf).find(found => found.length > 0)
 
   const rates = {}
   let inPricing = false
@@ -210,11 +242,10 @@ export function scrapeWeekdayOnlyCn(html) {
  * site's fallback shell — the quick-start index, no pricing table anywhere on
  * it. Our own docs mirror has been recording the same flap on other pages for
  * weeks. A shell is not a page that changed shape; it is a page we did not get.
+ *
+ * Which is why this must not know which models we price: see `pricingTableOf`.
  */
-export const hasPricingTable = (html) => {
-  const model = Object.keys(RATES)[0]
-  return (html.match(/<table[\s\S]*?<\/table>/gi) ?? []).some(table => table.includes(model))
-}
+export const hasPricingTable = html => pricingTableOf(html) !== undefined
 
 /** Attempts, and the pause before each retry. Four reads over ~15s, then give up. */
 const RETRY_DELAYS_MS = [1_000, 3_000, 10_000]
@@ -282,6 +313,9 @@ async function main() {
     }
 
     for (const [model, byTariff] of Object.entries(RATES)) {
+      // An unlisted model was already reported once above; six "missing" cells
+      // for it would bury the one line that says what happened.
+      if (!scraped.models.includes(model)) continue
       for (const tariff of ['offpeak', 'peak']) {
         for (const bucket of ['hit', 'miss', 'out']) {
           const ours = byTariff[tariff][currency][bucket]

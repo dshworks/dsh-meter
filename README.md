@@ -146,23 +146,32 @@ Carried verbatim in [`lib/core.js`](lib/core.js), per 1M tokens.
 
 | | cache hit | cache miss | output |
 |---|---|---|---|
-| **v4-flash** off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
-| v4-flash peak | $0.014 / ¥0.10 | $0.44 / ¥3 | $1.32 / ¥9 |
-| **v4-flash-vision-exp** off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
-| v4-flash-vision-exp peak | $0.014 / ¥0.10 | $0.44 / ¥3 | $1.32 / ¥9 |
+| **flash** off-peak | $0.003 / ¥0.02 | $0.15 / ¥1 | $0.6 / ¥4 |
+| flash peak | $0.006 / ¥0.04 | $0.3 / ¥2 | $1.2 / ¥8 |
 | **v4-pro** off-peak | $0.022 / ¥0.15 | $0.66 / ¥4.5 | $1.98 / ¥13.5 |
 | v4-pro peak | $0.044 / ¥0.30 | $1.32 / ¥9 | $3.96 / ¥27 |
 
 Peak is **01:00–04:00 and 06:00–10:00 UTC, Monday to Friday**
 (09:00–12:00 and 14:00–18:00 Beijing). Every other hour is off-peak,
 including the two-hour gap between the windows and the whole weekend.
-Off-peak is exactly half of peak — and still above the flat rate it
-replaced, by about 2.3x on output.
+Off-peak is exactly half of peak — and on pro still above the flat rate
+it replaced, by about 2.3x on output.
 
-`deepseek-v4-flash-vision-exp` shipped 2026-08-21 and bills at exactly
-the v4-flash rates in both currencies. Images are converted to tokens by
-their dimensions and billed as input. It has no flat row: it arrived
-after the switchover, so it has no pre-time-of-use history to reprice.
+**`deepseek-flash` is DeepSeek-V4.1-Flash, since 2026-09-10.** It
+replaced V4 Flash and V4 Flash Vision Exp — vision is built in now — and
+the Flash price fell with it: off-peak cache miss ¥1.5 -> ¥1, output
+¥4.5 -> ¥4, cache hit ¥0.05 -> ¥0.02. The old names still answer, served
+by V4.1 Flash and billed at the Flash price, so the meter bills a
+`deepseek-v4-flash` request dispatched after the cutover as
+`deepseek-flash`, and one dispatched before it at the old rate. The API
+echoes back whatever name you sent, so the echo cannot say which model
+billed; the dispatch time can.
+
+DeepSeek published a date, not an instant. The meter cuts over at
+**2026-09-09 16:00 UTC** (00:00 Beijing, the hour every earlier DeepSeek
+price change took effect), and our own bills bracket the real instant:
+a probe at 2026-09-09 08:44 UTC settled at the old Flash price and one
+at 2026-09-11 17:03 UTC at the new one.
 
 **Weekends have been off-peak all day since 2026-08-22 16:00 UTC**
 (00:00 Beijing, Sunday 23 August), on the *Beijing* calendar — so the
@@ -190,6 +199,21 @@ cheapest token, which is the one an agent sends most of.
 
 </details>
 
+<details>
+<summary>The retired V4 Flash card, kept to reprice history</summary>
+
+Billed by `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` until
+**2026-09-09 16:00 UTC**; both names bill as `deepseek-flash` since.
+
+| | cache hit | cache miss | output |
+|---|---|---|---|
+| **v4-flash** off-peak | $0.007 / ¥0.05 | $0.22 / ¥1.5 | $0.66 / ¥4.5 |
+| v4-flash peak | $0.014 / ¥0.10 | $0.44 / ¥3 | $1.32 / ¥9 |
+
+Vision Exp billed at exactly these rates from its launch on 2026-08-21.
+
+</details>
+
 Source: <https://api-docs.deepseek.com/quick_start/pricing>, diffed
 against both locales daily.
 
@@ -203,6 +227,13 @@ card predicts. Measured 2026-09-09, peak, on a live account:
 | --- | --- | --- | --- |
 | `deepseek-v4-flash` | 254,682 miss | ¥0.7641 | **¥0.77** |
 | `deepseek-v4-pro` | 127,491 miss | ¥1.1475 | **¥1.14** |
+
+It has already caught one repricing, and nearly let it go. On 2026-09-11,
+off-peak, one round across all three models settled **¥0.58** against the
+card's ¥0.749 — the new V4.1 Flash price, to the cent (¥0.583), a day after
+DeepSeek cut it. The band was 25% then and the run printed `ok`: a one-model
+change spread over a multi-model probe arrives diluted. It is 10% now, and a
+test replays that run's exact token counts.
 
 The two checks answer different questions, and the pair is the diagnosis:
 

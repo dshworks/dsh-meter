@@ -115,6 +115,37 @@ describe('judging a settled delta', () => {
     expect(judge(0.03, 0.9).verdict).toBe('dearer')   // cache bucket mispriced
   })
 
+  /* The first real price change this probe ever saw, replayed from the run
+   * log of 2026-09-11T17:03Z (off-peak). DeepSeek had cut Flash by a third
+   * the day before; three models were probed, two of them now Flash. The
+   * run printed `ok` under a 25% band. */
+  describe('the 2026-09-11 run, which measured a price cut and called it ok', () => {
+    const SEEN = [
+      { model: 'deepseek-v4-flash', totals: { miss: 166_243, hit: 0, out: 4 } },
+      { model: 'deepseek-v4-flash-vision-exp', totals: { miss: 165_918, hit: 0, out: 4 } },
+      { model: 'deepseek-v4-pro', totals: { miss: 55_696, hit: 0, out: 4 } },
+    ]
+    const SETTLED = 0.58
+    const total = successor => SEEN.reduce((sum, { model, totals }) => sum + predict(totals, successor(model), 'offpeak'), 0)
+
+    it('reads the old card as a finding', () => {
+      const oldCard = total(model => model)
+      expect(oldCard).toBeCloseTo(0.749, 3)
+      expect(judge(oldCard, SETTLED).verdict).toBe('cheaper')
+    })
+
+    it('reads the new card as a match, to the cent', () => {
+      const newCard = total(model => (model === 'deepseek-v4-pro' ? model : 'deepseek-flash'))
+      expect(newCard).toBeCloseTo(0.583, 3)
+      expect(judge(newCard, SETTLED).verdict).toBe('match')
+    })
+
+    it('can see a one-model change of 20%, diluted across two models', () => {
+      expect(judge(1.0, 0.9 - 0.001).verdict).toBe('cheaper')
+      expect(judge(1.0, 1.1 + 0.001).verdict).toBe('dearer')
+    })
+  })
+
   it('treats a small bill and a large one alike', () => {
     // v1 believed a small bill immediately, arguing other traffic can only
     // ADD. Incomplete settlement also makes a bill look small, and did.

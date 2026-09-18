@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   CACHE_DISCOUNT, CURRENCIES, CURRENCY_SYMBOL, PEAK_WINDOWS_BEIJING, PEAK_WINDOWS_UTC,
-  RATES, TARIFFS, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, tariffSchedule,
+  RATES, RETIRED, TARIFFS, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, rateOf, tariffSchedule,
 } from '../lib/core.js'
 import { BILL_CHECK } from '../lib/bill-check.js'
 
@@ -85,7 +85,7 @@ const feed = {
   verifiedAgainstBill: {
     ...BILL_CHECK,
     samples: BILL_CHECK.samples.map(sample => {
-      const rate = RATES[sample.model][BILL_CHECK.tariff][BILL_CHECK.currency]
+      const rate = rateOf(sample.model, BILL_CHECK.tariff, BILL_CHECK.currency)
       const predicted = (sample.tokens.miss * rate.miss + sample.tokens.hit * rate.hit + sample.tokens.out * rate.out) / 1e6
       return { ...sample, predicted: Number(predicted.toFixed(4)) }
     }),
@@ -184,6 +184,17 @@ const feed = {
         },
       },
     }),
+  }])),
+
+  /* Names DeepSeek still accepts for models it no longer runs. A feed that
+   * lists only the live card leaves every consumer pricing `deepseek-v4-flash`
+   * at zero, or at a price nobody charges any more. */
+  retiredModels: Object.fromEntries(Object.entries(RETIRED).map(([model, retired]) => [model, {
+    servedBy: retired.servedBy,
+    since: new Date(retired.from).toISOString(),
+    sinceEpochMs: retired.from,
+    note: `Requests under this name are served by ${retired.servedBy} and billed at its rates from \`since\`. The rates below are what the name billed before that, for repricing history only.`,
+    ratesBefore: ratesOf(retired.rates, TARIFFS.filter(tariff => retired.rates[tariff] !== undefined)),
   }])),
 }
 

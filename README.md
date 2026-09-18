@@ -168,10 +168,11 @@ echoes back whatever name you sent, so the echo cannot say which model
 billed; the dispatch time can.
 
 DeepSeek published a date, not an instant. The meter cuts over at
-**2026-09-09 16:00 UTC** (00:00 Beijing, the hour every earlier DeepSeek
-price change took effect), and our own bills bracket the real instant:
-a probe at 2026-09-09 08:44 UTC settled at the old Flash price and one
-at 2026-09-11 17:03 UTC at the new one.
+**2026-09-10 11:00 UTC**: our docs mirror saw the old card on the pricing
+page at 04:50 UTC that day and the new one at 11:27 UTC, and this is the
+last whole hour before the new one was seen, so an error can only
+overstate a bill. A probe at 2026-09-11 17:03 UTC settled on the new card
+to the cent.
 
 **Weekends have been off-peak all day since 2026-08-22 16:00 UTC**
 (00:00 Beijing, Sunday 23 August), on the *Beijing* calendar — so the
@@ -203,7 +204,7 @@ cheapest token, which is the one an agent sends most of.
 <summary>The retired V4 Flash card, kept to reprice history</summary>
 
 Billed by `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` until
-**2026-09-09 16:00 UTC**; both names bill as `deepseek-flash` since.
+**2026-09-10 11:00 UTC**; both names bill as `deepseek-flash` since.
 
 | | cache hit | cache miss | output |
 |---|---|---|---|

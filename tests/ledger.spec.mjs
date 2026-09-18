@@ -132,11 +132,12 @@ describe('the fold', () => {
   })
 
   describe('the V4.1 Flash retirement', () => {
-    /* Weekday off-peak on both sides of the cutover: 2026-09-10 is a
-     * Thursday, and 04:50 (the mirror's last old-card read) and 11:30 UTC
-     * are outside both peak windows. */
-    const oldDays = utc(2026, 9, 10, 4, 50)
-    const newDays = utc(2026, 9, 10, 11, 30)
+    /* Weekday off-peak on both sides of the cutover (2026-09-10 04:00 UTC,
+     * a Thursday): 2026-09-09 12:00 and 2026-09-10 04:50 UTC are outside
+     * both peak windows. 04:50 is when the pricing page still showed the old
+     * card — the bill had already moved. */
+    const oldDays = utc(2026, 9, 9, 12)
+    const newDays = utc(2026, 9, 10, 4, 50)
     const flashSession = at => fold([
       stepStart(at),
       header(at, 'deepseek-v4-flash'),

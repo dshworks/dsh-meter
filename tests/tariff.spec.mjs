@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CACHE_DISCOUNT, CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM,
-  WEEKEND_OFFPEAK_FROM, bucketCostOf, costOf, formatCountdown, formatMoney,
+  WEEKEND_OFFPEAK_FROM, bucketCostOf, cacheDiscountOf, costOf, formatCountdown, formatMoney,
   formatTokens, isBeijingWeekend, nextTariffChange, tariffAt, tariffSchedule,
 } from '../lib/core.js'
 
@@ -261,5 +261,24 @@ describe('display helpers', () => {
     expect(formatCountdown(3 * 3_600_000 + 20 * 60_000)).toBe('3h20m')
     expect(formatCountdown(50 * 3_600_000)).toBe('2d')
     expect(formatCountdown(-1)).toBe('0s')
+  })
+})
+
+describe('the cache tip speaks about the session\'s own model', () => {
+  const cardWide = CACHE_DISCOUNT
+
+  it('quotes Flash its own discount, not the card-wide minimum', () => {
+    // ¥1 miss against ¥0.02 hit, $0.15 against $0.003: 50x in both tables.
+    expect(cacheDiscountOf(['deepseek-flash'])).toBe(50)
+    expect(cardWide).toBe(30)
+  })
+
+  it('takes the smaller discount when a session mixed models', () => {
+    expect(cacheDiscountOf(['deepseek-flash', 'deepseek-v4-pro'])).toBe(30)
+  })
+
+  it('falls back to the card-wide figure for a model the live card does not price', () => {
+    expect(cacheDiscountOf(['mystery-model'])).toBe(cardWide)
+    expect(cacheDiscountOf([])).toBe(cardWide)
   })
 })

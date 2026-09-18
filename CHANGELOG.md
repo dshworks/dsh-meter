@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.2 - 2026-09-18
+
+### Changed
+
+- **The cache tip quotes the session's own model.** "A stable prompt prefix
+  bills at 1/N of the miss rate" used the smallest discount on the whole
+  card, which is Pro's 30x. V4.1 Flash, the default model, discounts a hit
+  50x, so every Flash session was told the payoff was 40% smaller than it
+  is. `cacheDiscountOf(models)` takes the smallest discount among the models
+  that actually billed; the rate-table footnote still quotes the card-wide
+  floor, which is right there as an "at least".
+- README examples price `deepseek-flash`, the model most sessions now run.
+
 ## 0.5.1 - 2026-09-18
 
 ### Fixed

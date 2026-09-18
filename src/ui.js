@@ -495,7 +495,7 @@ function MeterCard({ value, balance, currency, now, t, position }) {
   if (value.tokens.hit > 0) {
     notes.push(t('meter.cacheSaved', { amount: formatMoney(saved, currency), percent: hitShare }))
   } else if (promptTokens > 0) {
-    notes.push(t('meter.cacheCold', { factor: CACHE_DISCOUNT }))
+    notes.push(t('meter.cacheCold', { factor: cacheDiscountOf(value.models.map(entry => entry.model)) }))
   }
   if (clock.tariff === 'flat') {
     notes.push(t('meter.ifNewRates', {

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.5 - 2026-09-29
+
+### Fixed
+
+- **The dock line squeezed dsh's own stats into ellipses on dsh 0.1.7.**
+  0.1.7 made the composer dock one centred row, and the meter's
+  `width: 100%` took 437 of 719 px while the stats labels shrank to 204 px.
+  Nothing threw; only a live render showed it. The meter now takes its own
+  width and gives way first. On 0.1.5 it still sits on its own line.
+- **`@deepseek-ai/schemastery` shadowed the host's copy.** As a dependency
+  it was installed into the profile, and dsh resolves a package found there
+  before the host's, for every plugin in the profile. It is a peer now.
+- The week grid's footnote names Chinese public holidays beside weekends.
+
+### Changed
+
+- **Works on dsh 0.1.5, 0.1.7 and 0.2.0** — peers
+  `^0.1.5-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1`, each line rendered live.
+  dsh 0.2.0-rc.1's compatibility gate refused 0.5.4.
+- **The release watch checks the path users take.** It used to `npm install`
+  host and plugin into one tree, where npm installs peers at the highest
+  match. dsh never does that: `dsh plugin add` runs pnpm with
+  `autoInstallPeers: false` and routes harness imports to the host. So the
+  old check reported ten "split" harness packages that no user ever had,
+  and #30 was a false alarm. It now runs `dsh plugin add` in a scratch
+  `DSH_HOME` and asserts the gate admits the plugin and nothing the host
+  supplies lands in the profile, and it tests the exact version npm tags
+  `latest`, because pnpm holds back any release younger than a day.
+
 ## 0.5.4 - 2026-09-29
 
 ### Fixed

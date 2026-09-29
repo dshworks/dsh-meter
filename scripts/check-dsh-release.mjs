@@ -183,7 +183,19 @@ try {
     couldNotCheck(`could not pack this tree: ${error.message}`)
   }
 
-  const published = `${pkg.name}@latest`
+  // The exact version npm tags `latest`, not `@latest`. pnpm 11 resolves no
+  // version younger than `minimumReleaseAge` (1440 minutes by default), so
+  // `@latest` through `dsh plugin add` means the newest release at least a day
+  // old: for a day after every publish it would test the release before, and
+  // the daily run would open an issue about a fix that already shipped.
+  let published = `${pkg.name}@latest`
+  if (!TREE_ONLY) {
+    try {
+      published = `${pkg.name}@${run('npm', ['view', pkg.name, 'dist-tags.latest'], ROOT).trim()}`
+    } catch (error) {
+      couldNotCheck(`could not read ${pkg.name}'s dist-tags: ${error.message}`)
+    }
+  }
   check(required, tarball, `this tree on dsh ${required}`)
   if (!TREE_ONLY) check(required, published, `published ${published} on dsh ${required}`)
 

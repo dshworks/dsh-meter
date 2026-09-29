@@ -9,12 +9,16 @@
  *
  * So this drives `apply()` through a stand-in `systemPrompt` that reads exactly
  * the fields the published `@deepseek-ai/dsh-system-prompt` reads — `name`,
- * `order`, `text` (string or a per-assembly provider) — and asserts a real
- * string comes out the far end, including the empty one, which the registry
- * drops with `.filter(text => text.length > 0)` in `renderPrompt`.
+ * `order`, `text` (string or a per-assembly provider), `interpolate` — and
+ * renders them the way `renderPrompt` does: strict `{{name}}` interpolation
+ * unless `interpolate: false`, then empty sections dropped with
+ * `.filter(text => text.length > 0)`. A stand-in that skipped interpolation
+ * would pass a section whose text makes every real assembly throw.
  *
- * Checked against the harness source at dsh 0.1.0-rc.8. If a later rc changes
- * the shape, this test is what turns red instead of the prompt going quiet.
+ * Re-derived from the harness source at dsh 0.1.7-rc.2
+ * (packages/core/system-prompt/src/index.ts: `section()`, `renderPrompt`,
+ * `interpolate`). If a later rc changes the shape, this test is what turns red
+ * instead of the prompt going quiet.
  */
 import { describe, expect, it } from 'vitest'
 import { apply as applyPlugin } from '../lib/index.js'
@@ -43,13 +47,43 @@ const registeredSection = (config = {}) => {
   return captured
 }
 
-/** What the registry puts in front of the model, empty sections dropped. */
+/** `renderPrompt`'s reference grammar, copied from dsh-system-prompt 0.1.7-rc.2. */
+const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/
+const GROUP_AT = /^\{\{([^{}]*)\}\}/
+
+/**
+ * `interpolate()` as the registry runs it: every complete `{{name}}` group must
+ * name a registered variable, a malformed group throws, and a lone `{{` with no
+ * later `}}` is prose. The meter registers no variables, so none are passed.
+ */
+const interpolate = (name, text, variables = {}) => {
+  let result = ''
+  let last = 0
+  for (let open = text.indexOf('{{'); open >= 0; open = text.indexOf('{{', last)) {
+    const group = GROUP_AT.exec(text.slice(open))
+    if (group === null) {
+      if (text.indexOf('}}', open + 2) >= 0) throw new Error(`malformed prompt variable reference in section "${name}"`)
+      result += text.slice(last, open + 2)
+      last = open + 2
+      continue
+    }
+    const variable = group[1]
+    if (!VARIABLE_NAME.test(variable)) throw new Error(`malformed prompt variable reference "{{${variable}}}" in section "${name}"`)
+    if (!Object.hasOwn(variables, variable)) throw new Error(`unknown prompt variable "{{${variable}}}" in section "${name}"`)
+    result += text.slice(last, open) + variables[variable]
+    last = open + group[0].length
+  }
+  return result + text.slice(last)
+}
+
+/** What the registry puts in front of the model: `renderPrompt` over this one section. */
 const rendered = (section, now) => {
   const original = Date.now
   Date.now = () => now
   try {
     const text = typeof section.text === 'function' ? section.text({}) : section.text
-    return [text].filter(t => t.length > 0).join('\n\n')
+    const output = section.interpolate === false ? text : interpolate(section.name, text)
+    return [output].filter(t => t.length > 0).join('\n\n')
   } finally {
     Date.now = original
   }

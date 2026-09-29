@@ -12,6 +12,12 @@
  * and assert a client-visible value comes out of both. A stand-in weaker than
  * the real registry would miss the bug again, so each one reads exactly the
  * fields its published `lib/index.js` reads.
+ *
+ * Re-derived at dsh 0.1.7-rc.2: the registry still reads `key`, `init`,
+ * `apply`, `stateVersion`, `stateSchema` and `wire` and nothing else
+ * (packages/session/session-projection/src/index.ts `register`), and its push
+ * path is unchanged. What moved is the log: session format 4 adds events the
+ * fold has never seen, and each one runs through that push path.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { apply as applyPlugin } from '../lib/index.js'
@@ -66,6 +72,28 @@ const wireValueUnderNewRegistry = (definition, state) => {
   return definition.wire.viewSchema.parse(definition.wire.view(state))
 }
 
+/**
+ * The registry's live push, 0.1.1-rc.1 through 0.1.7-rc.2: per committed event,
+ * a value goes to an open browser only when `apply` returned a NEW state
+ * reference and the view differs by `Object.is`. A fold that mutated in place
+ * would never push (the dock line stands still until a reload); one that
+ * copied state for events it does not price would push on every event.
+ * @returns one entry per event: the pushed value, or undefined for no push.
+ */
+const pushedValues = (definition, events) => {
+  let state = definition.init()
+  let view
+  return events.map((next) => {
+    const after = definition.apply(state, next)
+    const changed = !Object.is(after, state)
+    state = after
+    if (!changed || definition.wire === undefined) return undefined
+    const previous = view
+    view = definition.wire.view(after)
+    return Object.is(previous, view) ? undefined : definition.wire.viewSchema.parse(view)
+  })
+}
+
 describe('costMeter registration', () => {
   it('reaches the client under the pre-0.1.1 registry', () => {
     const value = wireValueUnderOldRegistry(registeredDefinition(), oneRequest())
@@ -109,6 +137,36 @@ describe('costMeter registration', () => {
     expect(definition.stateSchema).toBeDefined()
     const restored = definition.stateSchema.parse(structuredClone(state))
     expect(wireValueUnderNewRegistry(definition, restored).requests).toBe(1)
+  })
+
+  it('pushes when a request bills, and stays silent for session-format-4 events it does not price', () => {
+    const at = utc(2026, 8, 20, 12)
+    const pushed = pushedValues(registeredDefinition(), [
+      event('step/start', at, { turn: 0, step: 0 }),
+      event('request/header', at, {
+        header: { config: { provider: 'deepseek', model: 'deepseek-v4-pro' } },
+        reason: 'initial',
+      }),
+      // New in session format 4 (dsh 0.1.7): none of them carries usage.
+      event('developer/message', at, {
+        turn: 0,
+        step: 0,
+        message: { role: 'developer', content: [{ type: 'tool-removal', toolName: 'bash' }], source: { kind: 'tool-update' } },
+      }),
+      event('image/offload', at, { turn: 0, step: 0 }),
+      event('workspace/changes', at, { turn: 0, step: 0 }),
+      event('assistant/message', at, {
+        turn: 0,
+        step: 0,
+        message: { source: { kind: 'model', provider: 'deepseek', model: 'deepseek-v4-pro' } },
+        stream: [],
+        usage: { inputTokens: 1000, cacheReadTokens: 500, outputTokens: 200 },
+      }),
+    ])
+    expect(pushed.slice(2, 5), 'an event the fold does not price must not push').toEqual([undefined, undefined, undefined])
+    expect(pushed[5], 'a billed request must reach an open dock line').toBeDefined()
+    expect(pushed[5].requests).toBe(1)
+    expect(pushed[5].money.usd.cost).toBeGreaterThan(0)
   })
 
   it('registers at a non-negative integer stateVersion', () => {

@@ -1,14 +1,17 @@
 # A new dsh release should turn this repo red, not quietly uninstall it.
 #
-# dsh ships prereleases only, and npm semver never lets a prerelease satisfy a
-# caret with a different version tuple. Every release therefore moves the whole
-# `@deepseek-ai/dsh-*` line outside any range we have already written, and
-# `npm i <this plugin>` beside current dsh fails with ERESOLVE. It happened on
-# 2026-08-21 and nobody noticed until 2026-09-04, because no test installs the
-# published plugin next to the published harness.
+# The check installs the plugin the way users do -- `dsh plugin --profile web
+# add <spec>` on a scratch dsh -- and asserts two things (see
+# scripts/check-dsh-release.mjs for the reasoning and the source it cites):
 #
-# The check reads npm, so it fails loudly rather than silently: a red scheduled
-# run notifies nobody, and an issue does.
+# - it installs at all. From dsh 0.1.7, `dsh plugin add` refuses a plugin whose
+#   `@deepseek-ai/dsh-*` peer range does not admit the running dsh, so the day
+#   `latest` moves to a line our range does not name, users cannot install us.
+# - the profile holds nothing dsh already supplies. `dependencies` are hoisted
+#   into the profile and shadow the host's copy for every plugin in it.
+#
+# It reads npm, so it fails loudly rather than silently: a red scheduled run
+# notifies nobody, and an issue does.
 name: dsh-release-watch
 
 on:
@@ -25,13 +28,15 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Two scratch dsh installs (`latest` and the version ahead of it) dominate.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: npm install --no-audit --no-fund
+      # `dsh plugin` runs pnpm; packing this tree needs no install.
+      - run: npm install --global pnpm
 
       # `--tree-only` on a pull request: the published package is still the
       # broken one on the very PR that fixes it, so gating a PR on it would
@@ -57,12 +62,16 @@ jobs:
             if [ "${{ steps.check.outputs.status }}" = "2" ]; then
               echo "The daily dsh release check could not finish."
             else
-              echo "A published dsh version no longer satisfies this plugin's peer ranges."
-              echo "Installing this plugin beside current dsh fails with \`ERESOLVE\`."
+              echo "This plugin no longer installs cleanly on the dsh users get."
               echo
-              echo "Fix: OR the new line into every harness peer range in \`package.json\`,"
-              echo "re-run the install proof, then publish — a fix on main that never"
-              echo "reaches npm leaves every user broken."
+              echo "- \`dsh plugin add\` refused it: a \`@deepseek-ai/dsh-*\` peer range in \`package.json\`"
+              echo "  no longer admits the running dsh. Prove the plugin works on the new line"
+              echo "  (install it, render the surface), then OR that line into the range."
+              echo "- The profile carries a copy of a package dsh supplies: move it from"
+              echo "  \`dependencies\` to \`peerDependencies\` (and \`devDependencies\` for tests)."
+              echo
+              echo "Then re-run \`node scripts/check-dsh-release.mjs\` and publish: a fix on main that"
+              echo "never reaches npm leaves every user broken."
             fi
             echo
             cat report.md

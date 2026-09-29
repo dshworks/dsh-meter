@@ -33,7 +33,7 @@
  */
 import { pathToFileURL } from 'node:url'
 
-import { PEAK_WINDOWS_UTC, RATES } from '../lib/core.js'
+import { BEIJING_OFFSET_MS, CN_HOLIDAYS_THROUGH, CN_HOLIDAY_PERIODS, PEAK_WINDOWS_UTC, RATES } from '../lib/core.js'
 
 /**
  * Canonical, with the trailing slash. The site is a Tencent COS bucket that
@@ -196,11 +196,40 @@ export function scrapeWindows(html) {
  * a support ticket.
  */
 export function scrapeWindowsCn(html) {
-  const sentence = /高峰时段为北京时间([^。]+)/.exec(text(html))
-  if (sentence === null) throw new Error('no "高峰时段为北京时间..." sentence on the page')
-  const beijing = [...sentence[1].matchAll(/(\d{1,2}):00/g)].map(match => Number(match[1]))
+  const sentence = peakSentenceCn(html)
+  const beijing = [...sentence.matchAll(/(\d{1,2}):00/g)].map(match => Number(match[1]))
   const utc = beijing.map(hour => (hour - BEIJING_OFFSET_HOURS + 24) % 24)
-  return pairWindows(utc, `"${sentence[1]}" (Beijing, converted at UTC+${BEIJING_OFFSET_HOURS})`)
+  return pairWindows(utc, `"${sentence}" (Beijing, converted at UTC+${BEIJING_OFFSET_HOURS})`)
+}
+
+/**
+ * The whole peak-hours footnote on the English page, from "Peak hours are"
+ * through the sentence that says what is off-peak.
+ *
+ * The whole footnote, because every rule DeepSeek has added to it arrived as
+ * a new clause in this one place: the weekdays after `UTC`, then the holidays
+ * both inside the peak sentence and in a new "All other hours" sentence that
+ * replaced "(all other hours are off-peak)". A pattern anchored on the old
+ * wording stops matching, which is the right failure, but the alarm it raises
+ * then says "could not read" instead of what changed.
+ */
+function peakFootnoteEn(html) {
+  const footnote = /Peak hours are ([^]+?off-peak[^.]*)\./i.exec(text(html))
+  if (footnote === null) throw new Error('no "Peak hours are ... off-peak" footnote on the page')
+  return footnote[1]
+}
+
+/**
+ * The same on the Chinese page: the one sentence that states the peak hours
+ * in Beijing time, in either word order DeepSeek has used —
+ * 「高峰时段为北京时间周一至周五 9:00 - 12:00…」 until 2026-09-18, and
+ * 「北京时间周一至周五（不含中国法定节假日）9:00 - 12:00…为高峰时段；其余时段…」 since.
+ */
+function peakSentenceCn(html) {
+  const sentence = text(html).split('。').find(part =>
+    part.includes('北京时间') && part.includes('高峰时段') && /\d{1,2}:00/.test(part))
+  if (sentence === undefined) throw new Error('no Beijing-time peak sentence (北京时间 … 高峰时段) on the page')
+  return sentence
 }
 
 /**
@@ -223,16 +252,43 @@ export function scrapeWindowsCn(html) {
  * @returns {boolean} true when peak is stated as weekdays-only.
  */
 export function scrapeWeekdayOnly(html) {
-  const sentence = /Peak hours are ([^.]+?)\s*\(all other hours are off-peak\)/i.exec(text(html))
-  if (sentence === null) throw new Error('no "Peak hours are ... (all other hours are off-peak)" sentence on the page')
-  return /Monday\s+through\s+Friday|Mon\s*[-\u2013]\s*Fri|weekdays/i.test(sentence[1])
+  return /Monday\s+through\s+Friday|Mon\s*[-\u2013]\s*Fri|weekdays/i.test(peakFootnoteEn(html))
 }
 
 /** The same, off the Chinese footnote — checked separately, for the reason `scrapeWindowsCn` gives. */
 export function scrapeWeekdayOnlyCn(html) {
-  const sentence = /高峰时段为北京时间([^。]+)/.exec(text(html))
-  if (sentence === null) throw new Error('no "高峰时段为北京时间..." sentence on the page')
-  return /周一至周五|工作日/.test(sentence[1])
+  return /周一至周五|工作日/.test(peakSentenceCn(html))
+}
+
+/**
+ * Whether the footnote puts Chinese public holidays off-peak, per locale.
+ * The clause that arrived on 2026-09-18/19 with no announcement; the card
+ * carries it as `CN_HOLIDAY_PERIODS`.
+ * @param {string} html - the English pricing page.
+ * @returns {boolean}
+ */
+export function scrapeHolidaysOffPeak(html) {
+  return /public\s+holidays?/i.test(peakFootnoteEn(html))
+}
+
+/** The same, off the Chinese footnote. */
+export function scrapeHolidaysOffPeakCn(html) {
+  return /节假日/.test(peakSentenceCn(html))
+}
+
+/**
+ * The holiday calendar is a list the State Council extends once a year, late
+ * in the year before. Past its last date the meter bills a holiday weekday at
+ * peak, so this raises the alarm a month ahead, while there is still time to
+ * copy the next notice in.
+ * @param {number} nowMs
+ * @returns {string|null} the drift line, or null while the calendar has room.
+ */
+export function holidayCalendarAlarm(nowMs) {
+  const horizon = new Date(nowMs + BEIJING_OFFSET_MS + 31 * 86_400_000).toISOString().slice(0, 10)
+  if (horizon <= CN_HOLIDAYS_THROUGH) return null
+  const next = Number(CN_HOLIDAYS_THROUGH.slice(0, 4)) + 1
+  return `the holiday calendar ends **${CN_HOLIDAYS_THROUGH}** — copy ${next}'s from the State Council's 部分节假日安排 notice (gov.cn) into \`CN_HOLIDAY_PERIODS\`, or every ${next} holiday weekday bills at peak`
 }
 
 /**
@@ -353,6 +409,20 @@ async function main() {
       drift.push(`the two pages no longer agree on the day axis: English weekdays-only **${enWeekday}** vs Beijing **${cnWeekday}** — the card holds ONE schedule for both platforms`)
     }
     note(`checked weekday restriction: ${enWeekday ? 'Mon-Fri' : 'ALL DAYS'} (English), ${cnWeekday ? '周一至周五' : '每天'} (Beijing page)`)
+
+    /* The holiday axis, since 2026-09-18/19. Either direction is a wrong
+     * bill: a page that drops the clause makes the card undercharge every
+     * holiday, and a card without it overcharges them 2x. */
+    const cardHolidays = CN_HOLIDAY_PERIODS.length > 0
+    const enHoliday = scrapeHolidaysOffPeak(pages.usd)
+    const cnHoliday = scrapeHolidaysOffPeakCn(pages.cny)
+    for (const [locale, stated] of [['English', enHoliday], ['Chinese', cnHoliday]]) {
+      if (stated && !cardHolidays) drift.push(`the ${locale} footnote puts Chinese public holidays off-peak and the card has no holiday calendar — every holiday weekday bills at 2x`)
+      if (!stated && cardHolidays) drift.push(`the ${locale} footnote no longer exempts Chinese public holidays — the card bills them off-peak and would now be undercharging them`)
+    }
+    note(`checked holiday rule: ${enHoliday ? 'off-peak' : 'NOT MENTIONED'} (English), ${cnHoliday ? '法定节假日空闲' : '未提及'} (Beijing page); calendar through ${CN_HOLIDAYS_THROUGH}`)
+    const calendar = holidayCalendarAlarm(Date.now())
+    if (calendar !== null) drift.push(calendar)
   } catch (error) {
     process.stderr.write(`verify-pricing: could not read the peak windows — ${error.message}\n`)
     process.exit(2)

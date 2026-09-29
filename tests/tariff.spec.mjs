@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CACHE_DISCOUNT, CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM,
-  WEEKEND_OFFPEAK_FROM, bucketCostOf, cacheDiscountOf, costOf, formatCountdown, formatMoney,
-  formatTokens, isBeijingWeekend, nextTariffChange, tariffAt, tariffSchedule,
+  CACHE_DISCOUNT, CN_HOLIDAYS_THROUGH, CN_HOLIDAY_PERIODS, CURRENCY_SYMBOL, PEAK_WINDOWS_UTC, RATES,
+  TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, bucketCostOf, cacheDiscountOf, costOf, formatCountdown,
+  formatMoney, formatTokens, isBeijingWeekend, isCnHoliday, nextTariffChange, tariffAt,
+  tariffSchedule,
 } from '../lib/core.js'
 
 const utc = (year, month, day, hour, minute = 0) => Date.UTC(year, month - 1, day, hour, minute)
@@ -280,5 +281,57 @@ describe('the cache tip speaks about the session\'s own model', () => {
   it('falls back to the card-wide figure for a model the live card does not price', () => {
     expect(cacheDiscountOf(['mystery-model'])).toBe(cardWide)
     expect(cacheDiscountOf([])).toBe(cardWide)
+  })
+})
+
+describe('the Chinese public holiday rule', () => {
+  it('copies each festival from the State Council notice, day counts included', () => {
+    // 国办发明电〔2025〕7号: 元旦 共3天, 春节 共9天, 清明节 共3天, 劳动节 共5天,
+    // 端午节 共3天, 中秋节 共3天, 国庆节 共7天. A mistyped end date changes the count.
+    const days = CN_HOLIDAY_PERIODS.map(([first, last]) => (Date.parse(last) - Date.parse(first)) / 86_400_000 + 1)
+    expect(days).toEqual([3, 9, 3, 5, 3, 3, 7])
+    for (const [first, last] of CN_HOLIDAY_PERIODS) expect(last <= CN_HOLIDAYS_THROUGH).toBe(true)
+    const sorted = [...CN_HOLIDAY_PERIODS].sort(([a], [b]) => a.localeCompare(b))
+    expect(CN_HOLIDAY_PERIODS).toEqual(sorted)
+  })
+
+  it('bills a holiday weekday off-peak inside a peak window', () => {
+    // Tue 2026-10-06 07:20 UTC is the Tuesday bill probe's own cron instant,
+    // inside the 06:00-10:00 UTC window, in the middle of National Day.
+    expect(tariffAt(utc(2026, 10, 6, 7, 20))).toBe('offpeak')
+    expect(tariffAt(utc(2026, 10, 1, 2, 0))).toBe('offpeak')    // Thu, National Day
+    expect(tariffAt(utc(2026, 9, 25, 2, 0))).toBe('offpeak')    // Fri, Mid-Autumn
+    // The weekdays either side are ordinary.
+    expect(tariffAt(utc(2026, 9, 24, 2, 0))).toBe('peak')       // Thu before Mid-Autumn
+    expect(tariffAt(utc(2026, 9, 30, 2, 0))).toBe('peak')       // Wed before National Day
+    expect(tariffAt(utc(2026, 10, 8, 2, 0))).toBe('peak')       // Thu after it
+  })
+
+  it('turns a holiday over on the vendor clock, not on UTC', () => {
+    // Beijing 10-01 00:00 is 16:00 UTC on 09-30; Beijing 10-08 00:00 is 16:00 UTC on 10-07.
+    expect(isCnHoliday(utc(2026, 9, 30, 15, 59))).toBe(false)
+    expect(isCnHoliday(utc(2026, 9, 30, 16, 0))).toBe(true)
+    expect(isCnHoliday(utc(2026, 10, 7, 15, 59))).toBe(true)
+    expect(isCnHoliday(utc(2026, 10, 7, 16, 0))).toBe(false)
+  })
+
+  it('keeps a make-up working day that falls on a weekend off-peak', () => {
+    // Sat 2026-10-10 and Sun 2026-09-20 are 调休 working days. The page puts
+    // peak on Monday to Friday only and every weekend off-peak.
+    expect(tariffAt(utc(2026, 10, 10, 2, 0))).toBe('offpeak')
+    expect(tariffAt(utc(2026, 9, 20, 2, 0))).toBe('offpeak')
+  })
+
+  it('counts National Day down to the Thursday after it, not to nothing', () => {
+    // Off-peak from Wed 09-30 10:00 UTC to Thu 10-08 01:00 UTC: 183 hours.
+    const change = nextTariffChange(utc(2026, 9, 30, 10, 0))
+    expect(change).toEqual({ tariff: 'offpeak', next: 'peak', at: utc(2026, 10, 8, 1, 0) })
+  })
+
+  it('always finds the next change, hour by hour, for as long as the calendar runs', () => {
+    const end = Date.parse(`${CN_HOLIDAYS_THROUGH}T00:00:00Z`)
+    for (let at = TIME_OF_USE_FROM; at < end; at += 3_600_000) {
+      expect(nextTariffChange(at).at, new Date(at).toISOString()).not.toBeNull()
+    }
   })
 })

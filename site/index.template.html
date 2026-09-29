@@ -356,7 +356,8 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem
     <p class="eyebrow">dsh plugin &middot; MIT &middot; not affiliated with DeepSeek</p>
     <h1>DeepSeek bills by the hour now. This is the meter for it.</h1>
     <p class="lede">Two peak windows a weekday, off-peak at half the peak rate &mdash;
-    and since 22 August, off-peak all weekend. Cost stopped being a number you read
+    and since 22 August, off-peak all weekend; since 19 September, every Chinese
+    public holiday too. Cost stopped being a number you read
     afterwards and became <strong>a rate you are standing in</strong>.</p>
     <p class="lede">One line under the dsh composer: what this session cost, which
     tariff is running, how long until it flips. Hover it for the tariff clock, the
@@ -387,7 +388,7 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.5rem
       </div>
       <div class="strip" id="inst-strip"><!--{{STRIP}}--></div>
       <div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
-      <p class="strip-day" id="inst-day">a weekday, in UTC &mdash; weekends bill off-peak all day</p>
+      <p class="strip-day" id="inst-day">a weekday, in UTC &mdash; weekends and Chinese public holidays bill off-peak all day</p>
     </div>
 
     <div class="inst-rates">
@@ -514,7 +515,8 @@ until the window closes. Outside one it says <strong>nothing at all</strong>
 <p class="note"><strong>It reads the same clock as the bill.</strong> The tariff
 comes from the same function the billing fold uses, at assembly time, so the
 nudge and the invoice can never disagree about which side of a boundary the next
-request lands on. Weekends bill off-peak for all 24 hours, so they get no nudge
+request lands on. Weekends and Chinese public holidays bill off-peak for all 24
+hours, so they get no nudge
 &mdash; asking a model to spend less on a day that is already half price would
 be a plugin lying to it about money.</p>
 

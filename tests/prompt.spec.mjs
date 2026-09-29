@@ -76,7 +76,7 @@ describe('tariffPrompt', () => {
 
 describe('peakHoursPhrase', () => {
   it('spells the schedule the meter is actually in', () => {
-    expect(peakHoursPhrase()).toBe('01:00-04:00 and 06:00-10:00 UTC, Monday to Friday')
+    expect(peakHoursPhrase()).toBe('01:00-04:00 and 06:00-10:00 UTC, Monday to Friday, except Chinese public holidays')
   })
 
   it('is derived, so the nudge cannot outlive the schedule', () => {

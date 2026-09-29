@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
-  PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, tariffSchedule,
+  CN_HOLIDAYS_THROUGH, CN_HOLIDAY_PERIODS, PEAK_WINDOWS_UTC, RATES, TIME_OF_USE_FROM,
+  WEEKEND_OFFPEAK_FROM, tariffAt, tariffSchedule,
 } from '../lib/core.js'
 
 /** Read the weekend rows out of the feed itself, so the test cannot drift from what is published. */
@@ -19,7 +20,7 @@ const feed = JSON.parse(readFileSync(new URL('../docs/pricing.json', import.meta
 
 describe('the published pricing feed', () => {
   it('declares a schema version, so a consumer can refuse a shape it does not know', () => {
-    expect(feed.schema).toBe('dsh-meter/pricing@2')
+    expect(feed.schema).toBe('dsh-meter/pricing@3')
   })
 
   it('cites the page each currency came from', () => {
@@ -70,9 +71,36 @@ describe('the published pricing feed', () => {
   it('drops the day-blind @1 schedule rather than deprecating it', () => {
     // A widened-but-kept `scheduleUtc` would let a reader that ignores the new
     // field stay silently wrong. Removing the key turns that into a crash.
-    expect(feed.schema).toBe('dsh-meter/pricing@2')
     expect(feed.timeOfUse.scheduleUtc).toBeUndefined()
     expect(feed.timeOfUse.changedInV2).toMatch(/scheduleUtc/)
+  })
+
+  it('publishes the holiday calendar, and a reading rule that checks it first', () => {
+    const { holidays, readingNow, changedInV3 } = feed.timeOfUse
+    expect(holidays.offPeakAllDay).toBe(true)
+    expect(holidays.periodsBeijing.map(({ first, last }) => [first, last])).toEqual(CN_HOLIDAY_PERIODS)
+    expect(holidays.throughBeijing).toBe(CN_HOLIDAYS_THROUGH)
+    expect(holidays.source).toMatch(/gov\.cn/)
+    expect(readingNow).toMatch(/holidays\.periodsBeijing/)
+    expect(changedInV3).toMatch(/holidays/)
+  })
+
+  it('prices every hour the way the meter does, read the way readingNow says', () => {
+    // The feed is only right if a stranger following its own recipe lands on
+    // the meter's tariff. Replay that recipe hour by hour, weekend rule to the
+    // end of the calendar, and compare.
+    const { holidays, scheduleBeijing } = feed.timeOfUse
+    const reader = (dispatchedAtMs) => {
+      const beijing = new Date(dispatchedAtMs + 8 * 3600000)
+      const date = beijing.toISOString().slice(0, 10)
+      return holidays.periodsBeijing.some(p => date >= p.first && date <= p.last)
+        ? 'offpeak'
+        : scheduleBeijing[beijing.getUTCDay()][beijing.getUTCHours()]
+    }
+    const end = Date.parse(`${CN_HOLIDAYS_THROUGH}T16:00:00Z`)
+    for (let at = WEEKEND_OFFPEAK_FROM; at < end; at += 3_600_000) {
+      expect(reader(at), new Date(at).toISOString()).toBe(tariffAt(at))
+    }
   })
 
   it('publishes the weekend rule with the date it started', () => {

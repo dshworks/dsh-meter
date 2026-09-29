@@ -14,8 +14,8 @@ import { RATES, RETIRED } from '../lib/core.js'
  */
 
 const README = {
-  en: { text: readFileSync(new URL('../README.md', import.meta.url), 'utf8'), offpeak: 'off-peak', peak: 'peak', weekdays: 'Monday to Friday' },
-  zh: { text: readFileSync(new URL('../README.zh.md', import.meta.url), 'utf8'), offpeak: '空闲', peak: '高峰', weekdays: '周一至周五' },
+  en: { text: readFileSync(new URL('../README.md', import.meta.url), 'utf8'), offpeak: 'off-peak', peak: 'peak', weekdays: 'Monday to Friday', holidays: 'public holidays' },
+  zh: { text: readFileSync(new URL('../README.zh.md', import.meta.url), 'utf8'), offpeak: '空闲', peak: '高峰', weekdays: '周一至周五', holidays: '法定节假日' },
 }
 
 /** `| **flash** off-peak | $0.003 / ¥0.02 | $0.15 / ¥1 | $0.6 / ¥4 |` -> the six numbers, or undefined. */
@@ -54,9 +54,12 @@ describe.each(Object.entries(README))('README (%s)', (_locale, readme) => {
     }
   })
 
-  it('restricts peak to weekdays wherever it states the windows', () => {
-    const sentence = readme.text.split('\n').find(line => /01:00.04:00/.test(line) && /06:00.10:00/.test(line))
-    expect(sentence).toBeDefined()
-    expect(sentence).toContain(readme.weekdays)
+  it('restricts peak to weekdays, holidays excepted, wherever it states the windows', () => {
+    // The paragraph, not the line: a clause wrapped onto the next line is
+    // still the same claim, and a line-level check would miss it either way.
+    const paragraph = readme.text.split(/\n\s*\n/).find(block => /01:00.04:00/.test(block) && /06:00.10:00/.test(block))
+    expect(paragraph).toBeDefined()
+    expect(paragraph).toContain(readme.weekdays)
+    expect(paragraph).toContain(readme.holidays)
   })
 })

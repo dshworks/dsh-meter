@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.4 - 2026-09-29
+
+### Fixed
+
+- **Chinese public holidays bill off-peak all day.** DeepSeek added the
+  clause to the pricing footnote between 2026-09-18 and 2026-09-19, with no
+  date and no announcement: "Monday through Friday, excluding Chinese public
+  holidays ... including weekends and Chinese public holidays in full". The
+  meter billed Mid-Autumn (Fri 09-25) at peak and would have billed five
+  National Day weekdays at peak too. `CN_HOLIDAY_PERIODS` carries the State
+  Council's 2026 calendar (国办发明电〔2025〕7号), each festival's whole
+  放假 period; make-up working days on a weekend stay off-peak. Both readings
+  are the page's; the Tuesday bill probe on 2026-10-06 is the first bill that
+  can confirm them, and its note now says so instead of blaming the cron.
+- **The daily pricing check could not read the new footnote, for ten days.**
+  The Chinese sentence changed word order and the English one lost the
+  "(all other hours are off-peak)" the weekday parser was anchored on, so
+  every run since 09-19 ended in "could not read the peak windows" instead of
+  naming the new clause. The parsers now read the whole footnote, a holiday
+  check sits beside the weekday one, and the check fails a month before the
+  holiday calendar runs out.
+- `nextTariffChange` searched eight days ahead; an off-peak run through
+  Spring Festival can pass ten. It searches three weeks, and a test walks
+  every hour of the calendar.
+- Any cached fold is recomputed (`stateVersion` 6), so a session from
+  Mid-Autumn reprices at off-peak.
+
+### Changed
+
+- **Pricing feed `dsh-meter/pricing@3`.** A `timeOfUse.holidays` block
+  carries the calendar, and `readingNow` checks it before `scheduleBeijing`,
+  which is the ordinary week and knows no calendar. A reader pinned to `@2`
+  bills holiday weekdays at 2x. A test replays the published recipe hour by
+  hour against the meter.
+- The saving-mode nudge and both READMEs say "except Chinese public
+  holidays"; the README tripwire now checks the whole paragraph that states
+  the windows, and requires the holiday clause.
+
 ## 0.5.3 - 2026-09-18
 
 ### Fixed

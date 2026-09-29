@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.4 - 2026-09-29
 
 ### Fixed
 
@@ -24,6 +24,8 @@
 - `nextTariffChange` searched eight days ahead; an off-peak run through
   Spring Festival can pass ten. It searches three weeks, and a test walks
   every hour of the calendar.
+- Any cached fold is recomputed (`stateVersion` 6), so a session from
+  Mid-Autumn reprices at off-peak.
 
 ### Changed
 

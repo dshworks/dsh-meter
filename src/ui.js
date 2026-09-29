@@ -146,8 +146,13 @@ const zh = {
 }
 
 const CSS = `
-.dshMeterRoot{display:block;max-width:var(--dsh-chat-content-width);width:100%;margin:0 auto;box-sizing:border-box;
-  padding:0 calc(var(--dsh-composer-side-clearance) + 16px) 2px;text-align:center;font-size:12px;line-height:20px;
+/* Before dsh 0.1.7 the dock stacks its entries in a centered column, so this
+   line sits alone under the harness's stats pills. From 0.1.7 the dock is one
+   centered row they share: this line takes its own width and, with that shrink
+   factor, gives way before the pills do. A 100% width here squeezed the pills
+   into ellipses on 0.1.7, and nothing threw. */
+.dshMeterRoot{display:block;flex:0 1000 auto;min-width:0;max-width:100%;box-sizing:border-box;
+  padding:0 0 2px;text-align:center;font-size:12px;line-height:20px;
   color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dshMeterLine{display:inline-flex;align-items:center;border-radius:6px;padding:0 7px;margin:0 -7px;
   cursor:default;outline:none;max-width:100%;transition:background-color 120ms ease-out}

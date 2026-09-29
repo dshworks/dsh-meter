@@ -151,11 +151,21 @@ Carried verbatim in [`lib/core.js`](lib/core.js), per 1M tokens.
 | **v4-pro** off-peak | $0.022 / ¥0.15 | $0.66 / ¥4.5 | $1.98 / ¥13.5 |
 | v4-pro peak | $0.044 / ¥0.30 | $1.32 / ¥9 | $3.96 / ¥27 |
 
-Peak is **01:00–04:00 and 06:00–10:00 UTC, Monday to Friday**
-(09:00–12:00 and 14:00–18:00 Beijing). Every other hour is off-peak,
-including the two-hour gap between the windows and the whole weekend.
-Off-peak is exactly half of peak — and on pro still above the flat rate
-it replaced, by about 2.3x on output.
+Peak is **01:00–04:00 and 06:00–10:00 UTC, Monday to Friday, except
+Chinese public holidays** (09:00–12:00 and 14:00–18:00 Beijing). Every
+other hour is off-peak, including the two-hour gap between the windows,
+the whole weekend, and every public holiday in full. Off-peak is exactly
+half of peak — and on pro still above the flat rate it replaced, by about
+2.3x on output.
+
+**Chinese public holidays bill off-peak all day.** The pricing footnote
+gained that clause between 2026-09-18 and 2026-09-19, with no date and no
+announcement. The meter carries the State Council's 2026 calendar, each
+festival's whole 放假 period (National Day is October 1–7), and its daily
+pricing check fails before that calendar runs out. Make-up working days
+that fall on a weekend stay off-peak, as the page words it. Both readings
+are the page's, not yet a bill's: the first peak-hour bill probe on a
+holiday is Tuesday 2026-10-06.
 
 **`deepseek-flash` is DeepSeek-V4.1-Flash, since 2026-09-10.** It
 replaced V4 Flash and V4 Flash Vision Exp — vision is built in now — and

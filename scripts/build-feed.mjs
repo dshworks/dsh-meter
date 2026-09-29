@@ -30,7 +30,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
-  CACHE_DISCOUNT, CURRENCIES, CURRENCY_SYMBOL, PEAK_WINDOWS_BEIJING, PEAK_WINDOWS_UTC,
+  CACHE_DISCOUNT, CN_HOLIDAYS_THROUGH, CN_HOLIDAY_PERIODS, CURRENCIES, CURRENCY_SYMBOL,
+  PEAK_WINDOWS_BEIJING, PEAK_WINDOWS_UTC,
   RATES, RETIRED, TARIFFS, TIME_OF_USE_FROM, WEEKEND_OFFPEAK_FROM, rateOf, tariffSchedule,
 } from '../lib/core.js'
 import { BILL_CHECK } from '../lib/bill-check.js'
@@ -69,7 +70,7 @@ const ratesOf = (byTariff, tariffs) => Object.fromEntries(tariffs.map(tariff => 
 ]))
 
 const feed = {
-  schema: 'dsh-meter/pricing@2',
+  schema: 'dsh-meter/pricing@3',
   generator: `@dshworks/dsh-meter@${version}`,
   homepage: 'https://dsh.works/dsh-meter/',
   /* Two independently published tables. An account bills in exactly one of
@@ -121,6 +122,16 @@ const feed = {
       sinceEpochMs: WEEKEND_OFFPEAK_FROM,
       note: 'Saturdays and Sundays on the Beijing clock bill off-peak for all 24 hours. Announced by DeepSeek only in the pricing-page footnote and only until it took effect; the live page now states the settled rule. The announcement survives at https://web.archive.org/web/20260822141620/https://api-docs.deepseek.com/quick_start/pricing/',
     },
+    /* Holidays, since the pricing footnote changed on 2026-09-18/19. The one
+     * exception `scheduleBeijing` cannot carry, because it is a calendar, not
+     * a weekly shape. */
+    holidays: {
+      offPeakAllDay: true,
+      periodsBeijing: CN_HOLIDAY_PERIODS.map(([first, last]) => ({ first, last })),
+      throughBeijing: CN_HOLIDAYS_THROUGH,
+      source: 'https://www.gov.cn/zhengce/content/202511/content_7047090.htm',
+      note: 'Chinese public holidays bill off-peak for all 24 hours on the Beijing calendar. DeepSeek added the clause to the pricing footnote between 2026-09-18 and 2026-09-19 with no effective date and no announcement. Each period is a festival\'s whole announced holiday, first to last day inclusive (National Day 2026 is 10-01 to 10-07), read that way rather than as the statutory days alone; make-up working days that fall on a weekend stay off-peak, as the page words it. Neither reading had been checked against a bill when this was published. Past throughBeijing the calendar is unknown: treat it as unpublished, not as "no holidays".',
+    },
     note: 'A request is billed at the tariff in force when it was DISPATCHED, not when the answer completed. A long response that starts off-peak and finishes in a peak window bills off-peak.',
 
     /* The policy is written in Beijing time on DeepSeek's Chinese page and in
@@ -135,12 +146,13 @@ const feed = {
     },
 
     /* The one way to misread this file. */
-    readingNow: 'const beijing = new Date(dispatchedAtMs + 8 * 3600000); tariff = scheduleBeijing[beijing.getUTCDay()][beijing.getUTCHours()]. Take BOTH indices off that one shifted instant, and read them with the getUTC* accessors: the shift has already moved the fields to Beijing, and the reader\'s own weekday and the vendor\'s disagree for the eight hours from 16:00 UTC. Never index with local hours. This file deliberately carries no current-time field, so a cached or vendored copy can never be stale about which tariff is running.',
+    readingNow: 'const beijing = new Date(dispatchedAtMs + 8 * 3600000); const date = beijing.toISOString().slice(0, 10); tariff = holidays.periodsBeijing.some(p => date >= p.first && date <= p.last) ? \'offpeak\' : scheduleBeijing[beijing.getUTCDay()][beijing.getUTCHours()]. Check the holiday first: scheduleBeijing is the ordinary week and knows no calendar. Take the date and BOTH indices off that one shifted instant, and read them with the getUTC* accessors: the shift has already moved the fields to Beijing, and the reader\'s own weekday and the vendor\'s disagree for the eight hours from 16:00 UTC. Never index with local hours. This file deliberately carries no current-time field, so a cached or vendored copy can never be stale about which tariff is running.',
 
     /* @1 published `scheduleUtc`, 24 entries with no day axis, so it read the
      * weekend as peak. It is gone rather than deprecated: this feed exists to
      * be vendored, and a wrong number left in place for a release is exactly
      * the failure the file argues against elsewhere. */
+    changedInV3: 'holidays was added and readingNow now checks it before scheduleBeijing. A reader pinned to @2 labels Chinese public holiday weekdays peak and so overstates those sessions by 2x, from 2026-09-25 (Mid-Autumn) on.',
     changedInV2: 'scheduleUtc (24 entries, index = UTC hour) was replaced by scheduleBeijing (7 x 24, index = [beijingWeekday][beijingHour]) and the weekend block was added. A reader pinned to @1 was labelling Saturday and Sunday peak and so overstating those sessions by 2x from 2026-08-22T16:00:00Z.',
   },
 

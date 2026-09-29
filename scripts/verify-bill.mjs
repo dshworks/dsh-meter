@@ -80,7 +80,7 @@
  * Env: DEEPSEEK_API_KEY (required).
  * Exit: 0 the card matches the bill, 1 it does not, 2 could not measure.
  */
-import { RATES, rateOf, tariffAt } from '../lib/core.js'
+import { RATES, isCnHoliday, rateOf, tariffAt } from '../lib/core.js'
 
 const API = 'https://api.deepseek.com'
 const KEY = process.env.DEEPSEEK_API_KEY ?? ''
@@ -308,9 +308,14 @@ async function main() {
   // off-peak as on, so measure the column the run actually landed in and say
   // which one went unchecked.
   const expected = after('--expect')
-  const late = expected !== null && expected !== tariff
-    ? `scheduled for the ${expected} column but GitHub started this run at ${new Date().toISOString().slice(11, 16)} UTC, in ${tariff}; measuring ${tariff} instead — ${expected} goes unchecked until the next run`
-    : null
+  // A holiday moves the column without the run being late. That run is worth
+  // more than a routine one: it is the only bill that tests the holiday rule
+  // (see CN_HOLIDAY_PERIODS), so say that instead of blaming the cron.
+  const late = expected === null || expected === tariff
+    ? null
+    : isCnHoliday(Date.now())
+      ? `scheduled for the ${expected} column, but today is a Chinese public holiday and the card bills it ${tariff} all day; measuring ${tariff} — a mismatch here means the holiday rule, not the card's rates, is wrong`
+      : `scheduled for the ${expected} column but GitHub started this run at ${new Date().toISOString().slice(11, 16)} UTC, in ${tariff}; measuring ${tariff} instead — ${expected} goes unchecked until the next run`
 
   if (flag('--dry-run')) {
     note(`tariff right now: ${tariff}`)

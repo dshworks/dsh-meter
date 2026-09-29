@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  fetchPage, hasPricingTable, scrape, scrapeWeekdayOnly, scrapeWeekdayOnlyCn, scrapeWindows,
-  scrapeWindowsCn,
+  fetchPage, hasPricingTable, holidayCalendarAlarm, scrape, scrapeHolidaysOffPeak,
+  scrapeHolidaysOffPeakCn, scrapeWeekdayOnly, scrapeWeekdayOnlyCn, scrapeWindows, scrapeWindowsCn,
 } from '../scripts/verify-pricing.mjs'
 
 /**
@@ -194,6 +194,39 @@ describe('the weekday clause', () => {
   it('refuses a page whose footnote it cannot find, rather than guessing', () => {
     expect(() => scrapeWeekdayOnly('<p>nothing here</p>')).toThrow(/Peak hours are/)
     expect(() => scrapeWeekdayOnlyCn('<p>nothing here</p>')).toThrow(/高峰时段/)
+  })
+})
+
+describe('the holiday clause', () => {
+  /* Verbatim from the live pages since 2026-09-19. The daily check failed on
+   * these for ten days with "could not read the peak windows": the Chinese
+   * sentence changed word order and the English one lost the parenthesis the
+   * weekday parser was anchored on. Both parsers must read them. */
+  const LIVE_EN = '<p>(2) Off-peak rates are half of the peak rates. Peak hours are 01:00 - 04:00 and 06:00 - 10:00 UTC, Monday through Friday, excluding Chinese public holidays. All other hours are off-peak, including weekends and Chinese public holidays in full.</p><p>(3) For more details on concurrency limits, see Rate Limit.</p>'
+  const LIVE_CN = '<p>(2) 空闲时段价格为高峰时段价格的一半。北京时间周一至周五（不含中国法定节假日）9:00 - 12:00、14:00 - 18:00 为高峰时段；其余时段，包括周末及中国法定节假日全天均为空闲时段。</p><p>(3) 更多并发限制细节，请参考限速与隔离。</p>'
+  /* The 2026-08-23 wording, which had no holiday clause. */
+  const AUGUST_EN = '<p>(1) Off-peak rates are half of the peak rates. Peak hours are 01:00 - 04:00 and 06:00 - 10:00 UTC, Monday through Friday (all other hours are off-peak).</p>'
+  const AUGUST_CN = '<p>(1) 空闲时段价格为高峰时段价格的一半。高峰时段为北京时间周一至周五 9:00 - 12:00、14:00 - 18:00（其余为空闲时段）。</p>'
+
+  it('reads the windows and the weekdays out of the new wording, in both locales', () => {
+    expect(scrapeWindows(LIVE_EN)).toEqual([[1, 4], [6, 10]])
+    expect(scrapeWindowsCn(LIVE_CN)).toEqual([[1, 4], [6, 10]])
+    expect(scrapeWeekdayOnly(LIVE_EN)).toBe(true)
+    expect(scrapeWeekdayOnlyCn(LIVE_CN)).toBe(true)
+  })
+
+  it('sees the holiday clause, and does not invent one in the August wording', () => {
+    expect(scrapeHolidaysOffPeak(LIVE_EN)).toBe(true)
+    expect(scrapeHolidaysOffPeakCn(LIVE_CN)).toBe(true)
+    expect(scrapeHolidaysOffPeak(AUGUST_EN)).toBe(false)
+    expect(scrapeHolidaysOffPeakCn(AUGUST_CN)).toBe(false)
+  })
+
+  it('warns a month before the holiday calendar runs out, and not before', () => {
+    // CN_HOLIDAYS_THROUGH is 2026-12-31 on the Beijing calendar.
+    expect(holidayCalendarAlarm(Date.UTC(2026, 8, 29, 12, 0))).toBeNull()
+    expect(holidayCalendarAlarm(Date.UTC(2026, 10, 30, 15, 59))).toBeNull()   // Beijing 11-30 23:59
+    expect(holidayCalendarAlarm(Date.UTC(2026, 10, 30, 16, 0))).toMatch(/2026-12-31.*2027/)   // Beijing 12-01 00:00
   })
 })
 

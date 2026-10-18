@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
-import { RATES, RETIRED } from '../lib/core.js'
+import { RATES, REQUEST_RATES, RETIRED, SEARCH_FETCH_FROM } from '../lib/core.js'
 
 /**
  * The READMEs quote the card. Nothing used to check that they still do.
@@ -13,9 +13,16 @@ import { RATES, RETIRED } from '../lib/core.js'
  * DeepSeek cut it, because a table in prose is a copy nothing diffs.
  */
 
+/** The instant search billing starts, spelled the way each README writes it, derived from the card. */
+const searchFrom = new Date(SEARCH_FETCH_FROM).toISOString()
+const SEARCH_FROM = {
+  en: `${searchFrom.slice(0, 10)} ${searchFrom.slice(11, 16)} UTC`,
+  zh: `UTC ${Number(searchFrom.slice(5, 7))} 月 ${Number(searchFrom.slice(8, 10))} 日 ${searchFrom.slice(11, 16)}`,
+}
+
 const README = {
-  en: { text: readFileSync(new URL('../README.md', import.meta.url), 'utf8'), offpeak: 'off-peak', peak: 'peak', weekdays: 'Monday to Friday', holidays: 'public holidays' },
-  zh: { text: readFileSync(new URL('../README.zh.md', import.meta.url), 'utf8'), offpeak: '空闲', peak: '高峰', weekdays: '周一至周五', holidays: '法定节假日' },
+  en: { text: readFileSync(new URL('../README.md', import.meta.url), 'utf8'), offpeak: 'off-peak', peak: 'peak', weekdays: 'Monday to Friday', holidays: 'public holidays', searchFrom: SEARCH_FROM.en },
+  zh: { text: readFileSync(new URL('../README.zh.md', import.meta.url), 'utf8'), offpeak: '空闲', peak: '高峰', weekdays: '周一至周五', holidays: '法定节假日', searchFrom: SEARCH_FROM.zh },
 }
 
 /** `| **flash** off-peak | $0.003 / ¥0.02 | $0.15 / ¥1 | $0.6 / ¥4 |` -> the six numbers, or undefined. */
@@ -61,5 +68,17 @@ describe.each(Object.entries(README))('README (%s)', (_locale, readme) => {
     expect(paragraph).toBeDefined()
     expect(paragraph).toContain(readme.weekdays)
     expect(paragraph).toContain(readme.holidays)
+  })
+
+  it('quotes the per-request card, and the instant it starts billing', () => {
+    for (const [api, label] of [['search', 'Search'], ['fetch', 'Fetch']]) {
+      const row = new RegExp(`^\\|\\s*${label}\\s*\\|([^\\n]+)\\|\\s*$`, 'm').exec(readme.text)
+      expect(row, `${label} row`).not.toBeNull()
+      expect({
+        usd: Number(/\$\s*(\d+(?:\.\d+)?)/.exec(row[1])?.[1]),
+        cny: Number(/¥\s*(\d+(?:\.\d+)?)/.exec(row[1])?.[1]),
+      }).toEqual(REQUEST_RATES[api])
+    }
+    expect(readme.text).toContain(readme.searchFrom)
   })
 })

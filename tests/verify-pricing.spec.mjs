@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { REQUEST_RATES, SEARCH_FETCH_FROM } from '../lib/core.js'
 import {
-  fetchPage, hasPricingTable, holidayCalendarAlarm, scrape, scrapeHolidaysOffPeak,
-  scrapeHolidaysOffPeakCn, scrapeWeekdayOnly, scrapeWeekdayOnlyCn, scrapeWindows, scrapeWindowsCn,
+  fetchPage, hasPricingTable, holidayCalendarAlarm, requestRateDrift, scrape, scrapeHolidaysOffPeak,
+  scrapeHolidaysOffPeakCn, scrapeRequestRates, scrapeSearchBillingFrom, scrapeWeekdayOnly,
+  scrapeWeekdayOnlyCn, scrapeWindows, scrapeWindowsCn,
 } from '../scripts/verify-pricing.mjs'
 
 /**
@@ -291,5 +293,73 @@ describe('the fallback shell', () => {
     const settled = expect(fetchPage('https://example.test/pricing/')).rejects.toThrow(/fallback shell/)
     await vi.advanceTimersByTimeAsync(60_000)
     await settled
+  })
+})
+
+/**
+ * The Search & Fetch table and its billing note, as both pages served them on
+ * 2026-10-17 — copied from the live markup, not paraphrased, since the parser
+ * finds the table by its unit column.
+ */
+const EN_REQUESTS = '<table><thead><tr><th>API</th><th>Unit</th><th>Price</th></tr></thead><tbody>'
+  + '<tr><td>Search</td><td>Per 1,000 successful requests</td><td>$0.75</td></tr>'
+  + '<tr><td>Fetch</td><td>Per 1,000 successful requests</td><td>$0.75</td></tr></tbody></table>'
+  + '<p>Note: when you use the DeepSeek API through DeepSeek Harness, Claude Code, or Codex, server-side tool calls already hit the Search and Fetch APIs. These calls are currently free of charge; per-request billing starts at 00:00 Beijing time on November 1, 2026.</p>'
+const CN_REQUESTS = '<table><thead><tr><th>API</th><th>计费单位</th><th>价格</th></tr></thead><tbody>'
+  + '<tr><td>Search</td><td>每 1,000 次成功请求</td><td>5元</td></tr>'
+  + '<tr><td>Fetch</td><td>每 1,000 次成功请求</td><td>5元</td></tr></tbody></table>'
+  + '<p>请注意，当前用户在 DeepSeek Harness/Claude Code/Codex 中使用 DeepSeek API 时，已经会通过 Server 端工具调用访问到 Search/Fetch 接口，这部分 Search/Fetch 接口调用目前未计费，并将于北京时间 2026 年 11 月 1 日 00:00 起按次收取调用费用。</p>'
+
+describe('the per-request card', () => {
+  const before = SEARCH_FETCH_FROM - 86_400_000
+  const after = SEARCH_FETCH_FROM + 86_400_000
+
+  it('reads both locales, past the token table on the same page', () => {
+    expect(scrapeRequestRates(EN_PAGE + EN_REQUESTS)).toEqual({ search: { per: 1000, price: 0.75 }, fetch: { per: 1000, price: 0.75 } })
+    expect(scrapeRequestRates(CN_PAGE + CN_REQUESTS)).toEqual({ search: { per: 1000, price: 5 }, fetch: { per: 1000, price: 5 } })
+  })
+
+  it('reads the billing start out of either note as 16:00 UTC on Oct 31, not as midnight anywhere', () => {
+    expect(scrapeSearchBillingFrom(EN_REQUESTS)).toBe(SEARCH_FETCH_FROM)
+    expect(scrapeSearchBillingFrom(CN_REQUESTS)).toBe(SEARCH_FETCH_FROM)
+    expect(scrapeSearchBillingFrom(EN_PAGE)).toBeNull()
+  })
+
+  it('agrees with the card as the pages stand', () => {
+    expect(requestRateDrift(scrapeRequestRates(EN_REQUESTS), scrapeSearchBillingFrom(EN_REQUESTS), 'usd', before)).toEqual([])
+    expect(requestRateDrift(scrapeRequestRates(CN_REQUESTS), scrapeSearchBillingFrom(CN_REQUESTS), 'cny', before)).toEqual([])
+  })
+
+  it('names a moved price, a new unit, and an API the card has never priced', () => {
+    const moved = scrapeRequestRates(EN_REQUESTS.replace('$0.75</td></tr><tr><td>Fetch', '$1</td></tr><tr><td>Fetch')
+      .replace('<td>Fetch</td><td>Per 1,000', '<td>Fetch</td><td>Per 100')
+      + '<table><tr><td>Crawl</td><td>Per 1,000 successful requests</td><td>$2</td></tr></table>')
+    const drift = requestRateDrift(moved, SEARCH_FETCH_FROM, 'usd', before).join('\n')
+    expect(drift).toMatch(/`search` per 1000 requests \(usd\): card says \*\*0\.75\*\*, DeepSeek says \*\*1\*\*/)
+    expect(drift).toMatch(/`fetch` \(usd\) is now quoted per \*\*100\*\* requests/)
+    expect(drift).toMatch(/`crawl` is priced per request upstream but absent/)
+  })
+
+  it('names a dropped API rather than reading it as zero', () => {
+    const { fetch: _gone, ...searchOnly } = scrapeRequestRates(EN_REQUESTS)
+    expect(requestRateDrift(searchOnly, SEARCH_FETCH_FROM, 'usd', before)).toEqual([
+      '`fetch` (usd) is on the per-request card but no longer in the published table',
+    ])
+  })
+
+  it('names a moved billing date, and a note gone early, but not a note gone once billing has started', () => {
+    const rates = scrapeRequestRates(EN_REQUESTS)
+    expect(requestRateDrift(rates, SEARCH_FETCH_FROM + 86_400_000, 'usd', before).join('\n')).toMatch(/search billing starts/)
+    expect(requestRateDrift(rates, null, 'usd', before).join('\n')).toMatch(/is gone from the usd page before the card's date/)
+    expect(requestRateDrift(rates, null, 'usd', after)).toEqual([])
+  })
+
+  it('refuses a page with no per-request table, rather than reporting no rates', () => {
+    expect(() => scrapeRequestRates(EN_PAGE)).toThrow(/per successful request/)
+    expect(() => scrapeRequestRates(EN_REQUESTS.replace(/\$0\.75/g, 'TBD'))).toThrow(/no price/)
+  })
+
+  it('carries one price per API per currency, the same rule as the token card', () => {
+    for (const byCurrency of Object.values(REQUEST_RATES)) expect(Object.keys(byCurrency).sort()).toEqual(['cny', 'usd'])
   })
 })

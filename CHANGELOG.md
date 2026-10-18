@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Web search, counted before it starts costing.** DeepSeek bills Search
+  and Fetch per request: $0.75 / ¥5 per 1,000 successful requests each.
+  dsh's own searches already go through them, and they are free until
+  2026-10-31 16:00 UTC (00:00 Beijing, Nov 1), per the pricing page. The
+  card gains a **web search** row: free before that instant, then a ceiling
+  marked `≤`, never added to the session total. It counts dsh's
+  `web/deepseek-search-llm-request` events sent to a deepseek.com host, one
+  per query, each at its `max_uses` (5 by default). dsh does not log how
+  many searches a request ran, so a ceiling is the only number the log
+  supports. Calls made with "Use the new Web Search API" switched on (dsh
+  0.2.1) leave nothing that names DeepSeek as the provider, so they are not
+  counted; the README says so. The settings rate card lists both prices.
+- **The daily pricing check reads the Search & Fetch table too**, in both
+  locales: each price, the per-1,000 unit, any new per-request API, and the
+  billing date in the page's note. A note gone before the card's date is
+  drift; gone after it, it is expected.
+
+### Changed
+
+- `stateVersion` 7: folds cached before this release are recomputed, so
+  searches already in a session's log are counted.
+
 ## 0.5.5 - 2026-09-29
 
 ### Fixed

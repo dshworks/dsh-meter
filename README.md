@@ -192,6 +192,35 @@ and only until it took effect; the live page now states just the settled
 rule, so the announcement survives at
 [the archived page](https://web.archive.org/web/20260822141620/https://api-docs.deepseek.com/quick_start/pricing/).
 
+**Web search bills per request from 2026-10-31 16:00 UTC** (00:00
+Beijing, November 1). dsh's own searches already go through DeepSeek's
+Search and Fetch APIs and are free until then, the pricing page says.
+After that, a request bills only when it returns a result; failed and
+empty ones are free.
+
+| | per 1,000 successful requests |
+|---|---|
+| Search | $0.75 / ¥5 |
+| Fetch | $0.75 / ¥5 |
+
+The card shows a **web search** row once a session searches: free
+before that instant, then a ceiling marked `≤`, kept out of the session
+total. It is a ceiling because of what dsh writes down. With the shipped
+search setting, each query is one auxiliary request to DeepSeek's
+Messages API, which may run up to 5 searches (`max_uses`). The session
+log records the request (`web/deepseek-search-llm-request`) but not how
+many searches it ran, so the meter counts each request at 5. Two things it
+cannot see at all:
+
+- **The opt-in switch, "Use the new Web Search API"** (the Web search
+  settings page, dsh 0.2.1 and later). Those calls leave nothing in the
+  log that says DeepSeek served them rather than another provider, so the
+  meter does not count them.
+- **The auxiliary request's own tokens.** dsh does not log them either.
+
+The default fetch provider is plain HTTP, not DeepSeek's, so it bills
+nothing.
+
 <details>
 <summary>The retired flat card, kept to reprice history</summary>
 
@@ -448,6 +477,7 @@ the argument for taking the keyboard away from all of us.
 | Cache writes | Folded into the miss bucket. DeepSeek publishes no separate write price and bills a first-time prompt at the miss rate; the DeepSeek adapter never reports one |
 | Failed requests | A step's usage chunk is counted even when the request then fails; the finalized message REPLACES that sample rather than adding to it, including when the message names a different model than the request header did |
 | Unknown models | Counted and named, never priced. A model with no published rate contributes tokens and requests to the readout and zero money, and the card says so |
+| Web search | One `web/deepseek-search-llm-request` per query sent to a deepseek.com host, counted at its `max_uses` and priced per request from 2026-10-31 16:00 UTC. A ceiling, shown beside the total and never inside it; a search through a relay is not counted |
 | Durability | One session projection (`costMeter`), folded from the log. It survives paging, compaction, a reload, and a server restart, and rides the standard projection cache |
 
 ## Model Experience
@@ -562,6 +592,11 @@ because nobody opened a PR this week. It runs on its own daily schedule.
 - **Non-DeepSeek routes are not priced.** Their tokens are counted and
   their model named; the card reports them as unpriced instead of quietly
   applying DeepSeek's rates to someone else's API.
+- **Web search is a ceiling, and only half visible.** Each DeepSeek search
+  request counts at the most it can bill, because the log does not say how
+  many searches ran. Calls made with "Use the new Web Search API" switched
+  on, and the tokens of each search's auxiliary request, are not in the
+  log.
 - **The rate card is compiled in.** DeepSeek changes prices; this plugin
   ships the time-of-use card as re-checked on 2026-08-17 and needs a
   release to follow the next change.

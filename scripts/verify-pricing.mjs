@@ -33,7 +33,10 @@
  */
 import { pathToFileURL } from 'node:url'
 
-import { BEIJING_OFFSET_MS, CN_HOLIDAYS_THROUGH, CN_HOLIDAY_PERIODS, PEAK_WINDOWS_UTC, RATES } from '../lib/core.js'
+import {
+  BEIJING_OFFSET_MS, CN_HOLIDAYS_THROUGH, CN_HOLIDAY_PERIODS, PEAK_WINDOWS_UTC, RATES,
+  REQUEST_RATES, REQUEST_RATE_UNIT, SEARCH_FETCH_FROM,
+} from '../lib/core.js'
 
 /**
  * Canonical, with the trailing slash. The site is a Tencent COS bucket that
@@ -158,6 +161,92 @@ export function scrape(html) {
     })
   }
   return { models, rates }
+}
+
+/** A per-request unit cell: "Per 1,000 successful requests", 「每 1,000 次成功请求」. */
+const REQUEST_UNIT = /(\d[\d,]*)\s*(?:次\s*)?(?:successful|成功)/i
+
+/**
+ * The Search & Fetch table, found by its unit column: one row per API, its
+ * name first, `Per 1,000 successful requests` next, the price last.
+ *
+ * Every row with that unit is read, not just Search and Fetch, so an API the
+ * page starts pricing per request reaches the diff instead of being skipped.
+ * @param {string} html - one pricing page.
+ * @returns {Record<string, {per: number, price: number}>} keyed by lower-case API name.
+ */
+export function scrapeRequestRates(html) {
+  const rows = (html.match(/<table[\s\S]*?<\/table>/gi) ?? []).flatMap(rowsOf)
+    .filter(cells => cells.length >= 3 && REQUEST_UNIT.test(cells[1]))
+  if (rows.length === 0) throw new Error('no table on the page prices an API per successful request')
+  const rates = {}
+  for (const cells of rows) {
+    const price = priceOf(cells[cells.length - 1])
+    if (price === undefined) throw new Error(`row "${cells.join(' | ')}" has no price in its last cell`)
+    rates[cells[0].toLowerCase()] = { per: Number(REQUEST_UNIT.exec(cells[1])[1].replace(/,/g, '')), price }
+  }
+  return rates
+}
+
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december']
+
+/**
+ * When the pricing note says per-request billing of dsh's own searches starts,
+ * as a UTC instant: "per-request billing starts at 00:00 Beijing time on
+ * November 1, 2026" and 「将于北京时间 2026 年 11 月 1 日 00:00 起按次收取」.
+ * @param {string} html - one pricing page.
+ * @returns {number|null} epoch ms, or null when the page carries no such note.
+ */
+export function scrapeSearchBillingFrom(html) {
+  const page = text(html)
+  const en = /billing starts at (\d{1,2}):(\d{2}) Beijing time on ([A-Za-z]+) (\d{1,2}), (\d{4})/i.exec(page)
+  if (en !== null) {
+    const month = MONTHS.indexOf(en[3].toLowerCase())
+    if (month < 0) throw new Error(`the billing note names a month it cannot read: "${en[0]}"`)
+    return Date.UTC(Number(en[5]), month, Number(en[4]), Number(en[1]), Number(en[2])) - BEIJING_OFFSET_MS
+  }
+  const cn = /北京时间\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*(\d{1,2}):(\d{2})\s*起按次/.exec(page)
+  if (cn !== null) {
+    return Date.UTC(Number(cn[1]), Number(cn[2]) - 1, Number(cn[3]), Number(cn[4]), Number(cn[5])) - BEIJING_OFFSET_MS
+  }
+  return null
+}
+
+/**
+ * The per-request half of the diff, for one locale, as drift lines.
+ *
+ * The free-until note is expected to leave the page once billing starts, so
+ * its absence is drift only before `SEARCH_FETCH_FROM`: then it would mean the
+ * card's date is no longer the page's, or that billing began early.
+ * @param {Record<string, {per: number, price: number}>} scraped - `scrapeRequestRates` of the page.
+ * @param {number|null} billingFrom - `scrapeSearchBillingFrom` of the page.
+ * @param {string} currency - `usd` or `cny`.
+ * @param {number} nowMs - the instant the check runs.
+ * @returns {string[]} one line per disagreement; empty in sync.
+ */
+export function requestRateDrift(scraped, billingFrom, currency, nowMs) {
+  const drift = []
+  for (const api of Object.keys(scraped)) {
+    if (REQUEST_RATES[api] === undefined) drift.push(`\`${api}\` is priced per request upstream but absent from \`REQUEST_RATES\` (${currency})`)
+  }
+  for (const [api, byCurrency] of Object.entries(REQUEST_RATES)) {
+    const theirs = scraped[api]
+    if (theirs === undefined) {
+      drift.push(`\`${api}\` (${currency}) is on the per-request card but no longer in the published table`)
+      continue
+    }
+    if (theirs.per !== REQUEST_RATE_UNIT) drift.push(`\`${api}\` (${currency}) is now quoted per **${theirs.per}** requests, the card per ${REQUEST_RATE_UNIT}`)
+    if (Math.abs(theirs.price - byCurrency[currency]) > 1e-9) {
+      drift.push(`\`${api}\` per ${REQUEST_RATE_UNIT} requests (${currency}): card says **${byCurrency[currency]}**, DeepSeek says **${theirs.price}**`)
+    }
+  }
+  if (billingFrom === null) {
+    if (nowMs < SEARCH_FETCH_FROM) drift.push(`the note saying when dsh's searches start billing is gone from the ${currency} page before the card's date, **${new Date(SEARCH_FETCH_FROM).toISOString()}**`)
+  } else if (billingFrom !== SEARCH_FETCH_FROM) {
+    drift.push(`search billing starts (${currency} page): card says **${new Date(SEARCH_FETCH_FROM).toISOString()}**, DeepSeek says **${new Date(billingFrom).toISOString()}**`)
+  }
+  return drift
 }
 
 /**
@@ -385,6 +474,16 @@ async function main() {
       }
     }
     note(`checked ${currency}: ${scraped.models.length} models, ${url}`)
+
+    let requests
+    try {
+      requests = scrapeRequestRates(html)
+    } catch (error) {
+      process.stderr.write(`verify-pricing: could not parse the per-request table on ${url} — ${error.message}\n`)
+      process.exit(2)
+    }
+    drift.push(...requestRateDrift(requests, scrapeSearchBillingFrom(html), currency, Date.now()))
+    note(`checked ${currency} per-request card: ${Object.keys(requests).join(', ')}`)
   }
 
   try {
@@ -435,7 +534,7 @@ async function main() {
 
   process.stdout.write(`\nDeepSeek's published pricing no longer matches \`lib/core.js\`:\n\n${drift.map(line => `- ${line}`).join('\n')}\n\n`)
   process.stdout.write(`Sources: ${Object.values(PAGES).join(' , ')}\n\n`)
-  process.stdout.write('Fix the \`PRICING-TABLE\` block in `lib/core.js`, run `npm run build`, and check `tests/tariff.spec.mjs` still holds — it pins invariants (off-peak is half of peak, the cache discount) that a new card can break.\n')
+  process.stdout.write('Fix the \`PRICING-TABLE\` block (or `REQUEST_RATES` / `SEARCH_FETCH_FROM`) in `lib/core.js`, run `npm run build`, and check `tests/tariff.spec.mjs` still holds — it pins invariants (off-peak is half of peak, the cache discount) that a new card can break.\n')
   process.exit(1)
 }
 

@@ -19,6 +19,12 @@ windows 01:00-04:00 and 06:00-10:00 UTC, off-peak at half the peak rate.
 Each request is priced at the tariff in force when it was **dispatched**,
 so a session spanning a boundary is billed correctly on both sides.
 
+Web search bills per request from 2026-10-31 16:00 UTC ($0.75 / ¥5 per
+1,000 successful requests). The card counts dsh's DeepSeek search requests
+from the session log and shows their cost as a ceiling (`max_uses` searches
+each), beside the token total and never inside it; searches through the
+opt-in Web Search API switch are not visible in the log and not counted.
+
 Money is computed against both published rate cards (USD for the
 international platform, CNY for the mainland one). They are independent
 tables, never converted; the account's own `/user/balance` currency

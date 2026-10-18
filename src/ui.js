@@ -56,6 +56,12 @@ const en = {
   'meter.ifNewRates': 'Under the rates starting {date}: {offpeak} off-peak, {peak} peak.',
   'meter.unpriced': '{count} requests on {models} have no published rate and are not counted.',
   'meter.source': 'Estimated from reported tokens at DeepSeek list prices. The invoice is authoritative.',
+  'meter.search': 'web search',
+  'meter.searchCount': '{count} req',
+  'meter.free': 'free',
+  'meter.searchFree': 'DeepSeek web search is free until {date}. At {rate} per 1,000, these {count} would bill at most {amount}.',
+  'meter.searchCeiling': '{count} web search requests can run up to {upTo} billed searches. The log does not say how many did, so {amount} is a ceiling, kept out of the total.',
+  'meter.requestRates': 'Web search and fetch: {search} and {fetch} per 1,000 successful requests, from {date}. Failed and empty ones are free.',
 
   // The settings section: the same instrument, readable before a session exists.
   'meter.nav': 'Meter',
@@ -114,6 +120,12 @@ const zh = {
   'meter.ifNewRates': '{date} 起的新价：空闲 {offpeak}，高峰 {peak}。',
   'meter.unpriced': '{count} 次请求使用 {models}，无公开价格，未计入。',
   'meter.source': '按 DeepSeek 官方价目与上报 token 估算，实际以账单为准。',
+  'meter.search': '网页搜索',
+  'meter.searchCount': '{count} 次',
+  'meter.free': '免费',
+  'meter.searchFree': 'DeepSeek 网页搜索 {date} 前免费。按每 1,000 次 {rate} 计，这 {count} 次最多计费 {amount}。',
+  'meter.searchCeiling': '这 {count} 次网页搜索请求最多执行 {upTo} 次计费搜索。日志不记录实际次数，所以 {amount} 是上限，不计入总额。',
+  'meter.requestRates': '网页搜索与抓取：每 1,000 次成功请求分别 {search}、{fetch}，{date} 起计费；失败或无结果不计费。',
 
   'meter.nav': '峰谷价',
   'meter.now': '当前',
@@ -440,16 +452,30 @@ function TariffStrip({ now, t }) {
   )
 }
 
-/** One breakdown row: what was billed, how many tokens, and what it cost. */
-function BreakdownRow({ label, tokens, cost, currency, plain }) {
+/**
+ * One breakdown row: what was billed, how much of it, and what it cost.
+ * `detail` replaces the token count for a row billed per request, `ceiling`
+ * marks a cost that is an upper bound, and `costText` replaces the money for
+ * a row that has none to show yet.
+ */
+function BreakdownRow({ label, tokens, detail, cost, costText, ceiling, currency, plain }) {
+  const money = React.createElement(Money, { amount: cost, currency, className: ceiling === true ? undefined : 'dshMeterRowCost' })
   return React.createElement(
     'div',
     { className: 'dshMeterRow' },
     React.createElement('span', { className: plain === true ? undefined : 'dshMeterRowKey' }, label),
-    React.createElement('span', { className: 'dshMeterRowTok' }, `${formatTokens(tokens)} tok`),
-    React.createElement(Money, { amount: cost, currency, className: 'dshMeterRowCost' }),
+    React.createElement('span', { className: 'dshMeterRowTok' }, detail ?? `${formatTokens(tokens)} tok`),
+    costText !== undefined
+      ? React.createElement('span', { className: 'dshMeterRowCost' }, costText)
+      : ceiling === true
+        ? React.createElement('span', { className: 'dshMeterRowCost' }, '≤ ', money)
+        : money,
   )
 }
+
+/** When per-request billing starts, on the reader's own clock. */
+const searchBillingDate = () => new Date(SEARCH_FETCH_FROM)
+  .toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 /** The account row: what is left, and how much of it expires. */
 function BalanceBlock({ balance, currency, t, bare }) {
@@ -514,6 +540,25 @@ function MeterCard({ value, balance, currency, now, t, position }) {
       offpeak: formatMoney(priced.counterfactual.offpeak, currency),
     }))
   }
+  // Web search is a ceiling, never part of the total; the row says so with
+  // `≤`, the notes say why. Older projections carry no `search` at all.
+  const search = value.search
+  const freeSearches = search === undefined ? 0 : search.requests - search.billedRequests
+  if (freeSearches > 0) {
+    notes.push(t('meter.searchFree', {
+      date: searchBillingDate(),
+      rate: formatRate(REQUEST_RATES.search[currency], currency),
+      count: freeSearches,
+      amount: formatMoney(priced.search.waivedUpTo, currency),
+    }))
+  }
+  if (search !== undefined && search.billedRequests > 0) {
+    notes.push(t('meter.searchCeiling', {
+      count: search.billedRequests,
+      upTo: search.billedUpTo,
+      amount: formatMoney(priced.search.upTo, currency),
+    }))
+  }
   if (value.unpricedRequests > 0) {
     notes.push(t('meter.unpriced', {
       count: value.unpricedRequests,
@@ -573,6 +618,16 @@ function MeterCard({ value, balance, currency, now, t, position }) {
           currency,
         })),
       ),
+    search === undefined || search.requests === 0
+      ? null
+      : React.createElement(BreakdownRow, {
+        label: t('meter.search'),
+        detail: t('meter.searchCount', { count: search.requests }),
+        ...search.billedRequests === 0
+          ? { costText: t('meter.free') }
+          : { cost: priced.search.upTo, ceiling: true },
+        currency,
+      }),
     React.createElement(BalanceBlock, { balance, currency, t }),
     notes.map((note, index) => React.createElement('div', { key: index, className: 'dshMeterNote' }, note)),
     React.createElement('div', { className: 'dshMeterFoot' }, t('meter.source')),
@@ -834,6 +889,11 @@ function RateTable({ currency, t }) {
           ))),
     ),
     React.createElement('div', { className: 'dshMeterNote' }, t('meter.cacheRatio', { factor: CACHE_DISCOUNT })),
+    React.createElement('div', { className: 'dshMeterNote' }, t('meter.requestRates', {
+      search: formatRate(REQUEST_RATES.search[currency], currency),
+      fetch: formatRate(REQUEST_RATES.fetch[currency], currency),
+      date: searchBillingDate(),
+    })),
   )
 }
 

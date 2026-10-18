@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { RATES, TIME_OF_USE_FROM, V41_FLASH_FROM, billedTokens, foldEvent, init, rateOf, schema, view } from '../lib/core.js'
+import {
+  RATES, REQUEST_RATES, SEARCH_FETCH_FROM, TIME_OF_USE_FROM, V41_FLASH_FROM,
+  billedTokens, foldEvent, init, rateOf, schema, stateSchema, view,
+} from '../lib/core.js'
 
 const utc = (year, month, day, hour, minute = 0) => Date.UTC(year, month - 1, day, hour, minute)
 
@@ -285,5 +288,111 @@ describe('the projected value', () => {
     expect(JSON.parse(JSON.stringify(state))).toEqual(state)
     const value = view(state)
     expect(JSON.parse(JSON.stringify(value))).toEqual(value)
+  })
+})
+
+/**
+ * One auxiliary search request as dsh's `web-search-deepseek` provider records
+ * it, immediately before dispatch: the resolved Messages endpoint and the exact
+ * secret-free body (packages/web/web-search-deepseek/src/provider.ts:228-242 at
+ * dsh-v0.2.1-rc.2; the same event at dsh-v0.2.0-rc.2).
+ */
+const searchRequest = (time, { endpoint = 'https://api.deepseek.com/anthropic/v1/messages', maxUses = 5, query = 'dsh 0.2.1' } = {}) =>
+  event('web/deepseek-search-llm-request', time, {
+    endpoint,
+    apiVersion: '2023-06-01',
+    body: {
+      model: 'deepseek-v4-flash',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: [{ type: 'text', text: `Perform a web search for the query: ${query}` }] }],
+      tools: maxUses === undefined
+        ? [{ type: 'web_search_20250305', name: 'web_search' }]
+        : [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses }],
+      thinking: { type: 'disabled' },
+    },
+  })
+
+describe('web search', () => {
+  const free = SEARCH_FETCH_FROM - 86_400_000
+  const billed = SEARCH_FETCH_FROM + 86_400_000
+  const perSearch = currency => REQUEST_RATES.search[currency] / 1000
+
+  it('counts a DeepSeek search dispatched before billing starts as free, and prices what it would cost', () => {
+    const value = view(fold([searchRequest(free)]))
+    expect(value.search).toEqual({ requests: 1, upTo: 5, billedRequests: 0, billedUpTo: 0 })
+    expect(value.money.usd.search.upTo).toBe(0)
+    expect(value.money.usd.search.waivedUpTo).toBeCloseTo(5 * perSearch('usd'), 10)
+    expect(value.money.cny.search.waivedUpTo).toBeCloseTo(5 * perSearch('cny'), 10)
+  })
+
+  it('bills from 16:00 UTC on 2026-10-31 exactly, not a millisecond before', () => {
+    expect(SEARCH_FETCH_FROM).toBe(Date.UTC(2026, 9, 31, 16, 0, 0))
+    expect(view(fold([searchRequest(SEARCH_FETCH_FROM - 1)])).search.billedRequests).toBe(0)
+    expect(view(fold([searchRequest(SEARCH_FETCH_FROM)])).search.billedRequests).toBe(1)
+  })
+
+  it('prices a request at its ceiling, max_uses searches, because the log never says how many ran', () => {
+    const value = view(fold([searchRequest(billed, { maxUses: 2 }), searchRequest(billed)]))
+    expect(value.search).toEqual({ requests: 2, upTo: 7, billedRequests: 2, billedUpTo: 7 })
+    expect(value.money.usd.search.upTo).toBeCloseTo(7 * perSearch('usd'), 10)
+    expect(value.money.cny.search.upTo).toBeCloseTo(7 * perSearch('cny'), 10)
+  })
+
+  it('falls back to dsh\'s default of 5 when the body names no max_uses', () => {
+    expect(view(fold([searchRequest(billed, { maxUses: undefined })])).search.upTo).toBe(5)
+  })
+
+  it('bills the same at peak and off-peak: the price is per request, not per token', () => {
+    const peak = Date.UTC(2026, 10, 2, 2) // Mon 2026-11-02, 10:00 Beijing
+    const offpeak = Date.UTC(2026, 10, 2, 12)
+    expect(view(fold([searchRequest(peak)])).money.usd.search)
+      .toEqual(view(fold([searchRequest(offpeak)])).money.usd.search)
+  })
+
+  it('ignores a search sent anywhere but DeepSeek, by host and not by substring', () => {
+    const state = init()
+    for (const endpoint of [
+      'https://relay.example.com/anthropic/v1/messages',
+      'https://api.deepseek.com.relay.example/v1/messages',
+      'not a url',
+      null,
+    ]) {
+      expect(foldEvent(state, searchRequest(billed, { endpoint }))).toBe(state)
+    }
+    const { endpoint: _missing, ...noEndpoint } = searchRequest(billed).data
+    expect(foldEvent(state, { ...searchRequest(billed), data: noEndpoint })).toBe(state)
+    expect(view(fold([searchRequest(billed, { endpoint: 'https://deepseek.com/anthropic/v1/messages' })])).search.requests).toBe(1)
+  })
+
+  it('never adds a search to the session total, which stays an estimate from tokens', () => {
+    const tokens = [
+      stepStart(billed),
+      header(billed, 'deepseek-flash'),
+      message(billed + 1000, 'deepseek-flash', usage(100_000, 0, 1_000)),
+    ]
+    const without = view(fold(tokens))
+    const withSearch = view(fold([...tokens, searchRequest(billed + 500)]))
+    expect(withSearch.money.usd.cost).toBe(without.money.usd.cost)
+    expect(withSearch.requests).toBe(without.requests)
+    expect(withSearch.search.requests).toBe(1)
+  })
+
+  it('reads a state folded before searches were counted as an empty ledger', () => {
+    const { search: _dropped, ...older } = fold([stepStart(billed)])
+    const value = view(foldEvent(older, searchRequest(billed)))
+    expect(value.search.requests).toBe(1)
+    expect(view(older).search).toEqual({ requests: 0, upTo: 0, billedRequests: 0, billedUpTo: 0 })
+  })
+
+  it('passes both schemas, and each rejects a broken search ledger', () => {
+    const state = fold([searchRequest(free), searchRequest(billed)])
+    expect(() => stateSchema.parse(state)).not.toThrow()
+    expect(() => stateSchema.parse({ ...state, search: { ...state.search, billed: { requests: -1, upTo: 0 } } }))
+      .toThrow(/search.billed.requests/)
+    const value = view(state)
+    expect(() => schema.parse(value)).not.toThrow()
+    expect(() => schema.parse({ ...value, search: { ...value.search, upTo: 1.5 } })).toThrow(/search.upTo/)
+    expect(() => schema.parse({ ...value, money: { ...value.money, cny: { ...value.money.cny, search: undefined } } }))
+      .toThrow(/money.cny.search/)
   })
 })

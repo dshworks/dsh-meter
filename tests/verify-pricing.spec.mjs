@@ -310,6 +310,22 @@ const CN_REQUESTS = '<table><thead><tr><th>API</th><th>计费单位</th><th>价�
   + '<tr><td>Fetch</td><td>每 1,000 次成功请求</td><td>5元</td></tr></tbody></table>'
   + '<p>请注意，当前用户在 DeepSeek Harness/Claude Code/Codex 中使用 DeepSeek API 时，已经会通过 Server 端工具调用访问到 Search/Fetch 接口，这部分 Search/Fetch 接口调用目前未计费，并将于北京时间 2026 年 11 月 1 日 00:00 起按次收取调用费用。</p>'
 
+/**
+ * The same tables as both pages served them on 2026-11-15, after the
+ * 2026-11-13 release renamed the rows, dropped "successful" from the unit and
+ * added per-page and speech tables beside them. Copied from the live markup.
+ */
+const EN_REQUESTS_1113 = '<table><thead><tr><th>Item</th><th>Unit</th><th>Price</th></tr></thead><tbody>'
+  + '<tr><td>Search (text, image)</td><td>Per 1,000 searches</td><td>$0.75</td></tr>'
+  + '<tr><td>Web fetch</td><td>Per 1,000 fetches</td><td>$0.75</td></tr></tbody></table>'
+  + '<table><thead><tr><th>Item</th><th>Unit</th><th>Price</th></tr></thead><tbody><tr><td><a href="/guides/document_parsing">File parsing</a>, <a href="/guides/ocr">OCR API</a></td><td>Per 1,000 pages</td><td>$0.225</td></tr></tbody></table>'
+  + '<table><thead><tr><th>API</th><th>Unit</th><th>List price</th><th>Limited-time price (50% off)</th></tr></thead><tbody><tr><td><a href="/guides/tts">Text to Speech (TTS)</a></td><td>Per 10,000 characters</td><td>$0.45</td><td>$0.225</td></tr><tr><td><a href="/guides/asr">Speech to Text (ASR)</a></td><td>Per hour of audio</td><td>$0.116</td><td>$0.058</td></tr></tbody></table>'
+const CN_REQUESTS_1113 = '<table><thead><tr><th>项目</th><th>计费单位</th><th>价格</th></tr></thead><tbody>'
+  + '<tr><td>搜索（文字、图片）</td><td>每 1,000 次</td><td>5元</td></tr>'
+  + '<tr><td>网页抓取</td><td>每 1,000 次</td><td>5元</td></tr></tbody></table>'
+  + '<table><thead><tr><th>项目</th><th>计费单位</th><th>价格</th></tr></thead><tbody><tr><td><a href="/zh-cn/guides/document_parsing">文件解析</a>、<a href="/zh-cn/guides/ocr">OCR API</a></td><td>每 1,000 页</td><td>1.5元</td></tr></tbody></table>'
+  + '<table><thead><tr><th>API</th><th>计费单位</th><th>刊例价</th><th>限时折扣价（5 折）</th></tr></thead><tbody><tr><td><a href="/zh-cn/guides/tts">语音合成（TTS）</a></td><td>每 10,000 字符</td><td>3元</td><td>1.5元</td></tr><tr><td><a href="/zh-cn/guides/asr">语音识别（ASR）</a></td><td>每小时音频</td><td>0.78元</td><td>0.39元</td></tr></tbody></table>'
+
 describe('the per-request card', () => {
   const before = SEARCH_FETCH_FROM - 86_400_000
   const after = SEARCH_FETCH_FROM + 86_400_000
@@ -317,6 +333,22 @@ describe('the per-request card', () => {
   it('reads both locales, past the token table on the same page', () => {
     expect(scrapeRequestRates(EN_PAGE + EN_REQUESTS)).toEqual({ search: { per: 1000, price: 0.75 }, fetch: { per: 1000, price: 0.75 } })
     expect(scrapeRequestRates(CN_PAGE + CN_REQUESTS)).toEqual({ search: { per: 1000, price: 5 }, fetch: { per: 1000, price: 5 } })
+  })
+
+  it('reads the 2026-11-13 tables: renamed rows, unit without "successful", and not the per-page or speech prices', () => {
+    expect(scrapeRequestRates(EN_PAGE + EN_REQUESTS_1113)).toEqual({ search: { per: 1000, price: 0.75 }, fetch: { per: 1000, price: 0.75 } })
+    expect(scrapeRequestRates(CN_PAGE + CN_REQUESTS_1113)).toEqual({ search: { per: 1000, price: 5 }, fetch: { per: 1000, price: 5 } })
+    // The free-until note left both pages with the release; billing had already started.
+    expect(scrapeSearchBillingFrom(EN_REQUESTS_1113)).toBeNull()
+    const after = SEARCH_FETCH_FROM + 86_400_000
+    expect(requestRateDrift(scrapeRequestRates(EN_REQUESTS_1113), null, 'usd', after)).toEqual([])
+    expect(requestRateDrift(scrapeRequestRates(CN_REQUESTS_1113), null, 'cny', after)).toEqual([])
+  })
+
+  it('refuses two rows that read as one API instead of keeping the last', () => {
+    const split = EN_REQUESTS_1113.replace('<td>Search (text, image)</td><td>Per 1,000 searches</td><td>$0.75</td></tr>',
+      '<td>Search (text)</td><td>Per 1,000 searches</td><td>$0.75</td></tr><tr><td>Image search</td><td>Per 1,000 searches</td><td>$1.5</td></tr>')
+    expect(() => scrapeRequestRates(split)).toThrow(/two rows read as `search`/)
   })
 
   it('reads the billing start out of either note as 16:00 UTC on Oct 31, not as midnight anywhere', () => {
@@ -355,7 +387,7 @@ describe('the per-request card', () => {
   })
 
   it('refuses a page with no per-request table, rather than reporting no rates', () => {
-    expect(() => scrapeRequestRates(EN_PAGE)).toThrow(/per successful request/)
+    expect(() => scrapeRequestRates(EN_PAGE)).toThrow(/prices an API per request/)
     expect(() => scrapeRequestRates(EN_REQUESTS.replace(/\$0\.75/g, 'TBD'))).toThrow(/no price/)
   })
 

@@ -163,27 +163,49 @@ export function scrape(html) {
   return { models, rates }
 }
 
-/** A per-request unit cell: "Per 1,000 successful requests", 「每 1,000 次成功请求」. */
-const REQUEST_UNIT = /(\d[\d,]*)\s*(?:次\s*)?(?:successful|成功)/i
+/**
+ * A per-request unit cell, in every wording the pages have used:
+ * "Per 1,000 successful requests" and 「每 1,000 次成功请求」 (2026-10-17), then
+ * "Per 1,000 searches", "Per 1,000 fetches" and 「每 1,000 次」 (2026-11-13).
+ * Per page, per character and per hour of audio do not match: those tables
+ * price file parsing, OCR, TTS and ASR, which dsh does not call on its own.
+ */
+const REQUEST_UNIT = /(\d[\d,]*)\s*(?:次|successful|requests?\b|searches\b|fetches\b)/i
+
+/**
+ * The card key for one row's name. The 2026-11-13 pages renamed the rows
+ * "Search (text, image)" / 「搜索（文字、图片）」 and "Web fetch" / 「网页抓取」;
+ * they were "Search" and "Fetch" before. Any other name stays as written, so it
+ * reaches the diff as an API the card has never priced.
+ */
+const requestApiOf = (name) => {
+  if (/fetch|抓取/i.test(name)) return 'fetch'
+  if (/search|搜索/i.test(name)) return 'search'
+  return name.toLowerCase()
+}
 
 /**
  * The Search & Fetch table, found by its unit column: one row per API, its
- * name first, `Per 1,000 successful requests` next, the price last.
+ * name first, the per-request unit next, the price last.
  *
  * Every row with that unit is read, not just Search and Fetch, so an API the
  * page starts pricing per request reaches the diff instead of being skipped.
+ * Two rows that read as the same API (an image search priced on its own row,
+ * say) are refused rather than letting the second overwrite the first.
  * @param {string} html - one pricing page.
- * @returns {Record<string, {per: number, price: number}>} keyed by lower-case API name.
+ * @returns {Record<string, {per: number, price: number}>} keyed by card API name.
  */
 export function scrapeRequestRates(html) {
   const rows = (html.match(/<table[\s\S]*?<\/table>/gi) ?? []).flatMap(rowsOf)
     .filter(cells => cells.length >= 3 && REQUEST_UNIT.test(cells[1]))
-  if (rows.length === 0) throw new Error('no table on the page prices an API per successful request')
+  if (rows.length === 0) throw new Error('no table on the page prices an API per request')
   const rates = {}
   for (const cells of rows) {
     const price = priceOf(cells[cells.length - 1])
     if (price === undefined) throw new Error(`row "${cells.join(' | ')}" has no price in its last cell`)
-    rates[cells[0].toLowerCase()] = { per: Number(REQUEST_UNIT.exec(cells[1])[1].replace(/,/g, '')), price }
+    const api = requestApiOf(cells[0])
+    if (rates[api] !== undefined) throw new Error(`two rows read as \`${api}\`; the card has one price for it: "${cells.join(' | ')}"`)
+    rates[api] = { per: Number(REQUEST_UNIT.exec(cells[1])[1].replace(/,/g, '')), price }
   }
   return rates
 }
